@@ -1,0 +1,21 @@
+{
+  "name": "bluff",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=@bluff/shared && npm run build --workspace=@bluff/game-engine && npm run build --workspace=@bluff/server && npm run build --workspace=@bluff/web",
+    "test": "npm run build --workspace=@bluff/shared && npm run test --workspace=@bluff/game-engine && npm run test --workspace=@bluff/server && npm run test --workspace=@bluff/web",
+    "test:watch": "npm run test:watch --workspace=@bluff/game-engine",
+    "typecheck": "npm run build --workspace=@bluff/shared && npm run build --workspace=@bluff/game-engine && npm run typecheck --workspace=@bluff/server && npm run typecheck --workspace=@bluff/web"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prettier": "^3.6.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}
