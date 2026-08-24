@@ -17,6 +17,7 @@ export interface RoomView {
 
 export interface GameViewEnvelope {
   readonly revision: number;
+  readonly turnDeadlineAt?: number;
   readonly game: PlayerView;
 }
 

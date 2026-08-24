@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useBluffSocket } from '../socket-provider.js';
 import { PlayerChip, PlayingPileView } from '../components/shared.js';
 import { ActionDock } from '../components/ActionDock.js';
@@ -43,6 +43,35 @@ export function GameTable() {
   const { game, room, lastEvent } = useBluffSocket();
   const [showMenu, setShowMenu] = useState(false);
   const [roundToast, setRoundToast] = useState<string | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const currentPlayerId = game?.game.currentPlayerId;
+  const selfPlayerId = room?.selfPlayerId;
+  const observedTurn = useRef(false);
+  const previousCurrentPlayerId = useRef(currentPlayerId);
+
+  useEffect(() => {
+    if (!observedTurn.current) {
+      observedTurn.current = true;
+      previousCurrentPlayerId.current = currentPlayerId;
+      return;
+    }
+    if (currentPlayerId !== previousCurrentPlayerId.current && currentPlayerId === selfPlayerId && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(200);
+    }
+    previousCurrentPlayerId.current = currentPlayerId;
+  }, [currentPlayerId, selfPlayerId]);
+
+  useEffect(() => {
+    const deadline = game?.turnDeadlineAt;
+    if (deadline === undefined) {
+      setSecondsLeft(0);
+      return;
+    }
+    const update = () => setSecondsLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    update();
+    const interval = window.setInterval(update, 1000);
+    return () => window.clearInterval(interval);
+  }, [game?.turnDeadlineAt]);
 
   useEffect(() => {
     if (!lastEvent || !game) return;
@@ -132,7 +161,7 @@ export function GameTable() {
         </div>
 
         {/* ── Central Claim Plaque & Pile ─────────── */}
-        <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 text-center pointer-events-none z-10 flex flex-col items-center">
+        <div className="absolute inset-x-8 top-[58%] -translate-y-1/2 text-center pointer-events-none z-10 flex flex-col items-center">
           {/* Claim Plaque */}
           <div className="claim-plaque rounded-2xl px-5 py-2.5 max-w-[14rem] w-full mb-1">
             <p className="text-[10px] text-zinc-400 uppercase font-semibold tracking-wider">
@@ -161,15 +190,20 @@ export function GameTable() {
           {/* Turn Alert Banner */}
           {isMyTurn ? (
             <div className="mt-1 flex flex-col items-center animate-bounce">
-              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/60 font-black text-xs px-3 py-0.5 rounded-full shadow-[0_0_12px_#34d39980] tracking-wider">
-                YOUR TURN
+              <span className={[
+                'border font-black text-xs px-3 py-0.5 rounded-full tracking-wider',
+                secondsLeft <= 10
+                  ? 'bg-red-500/20 text-red-300 border-red-400/70 shadow-[0_0_12px_#f8717180] animate-pulse'
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/60 shadow-[0_0_12px_#34d39980]',
+              ].join(' ')}>
+                YOUR TURN {secondsLeft > 0 ? `· ${secondsLeft}s` : '· 0s'}
               </span>
               <span className="text-emerald-400 text-xs font-bold leading-none -mt-0.5">▼</span>
             </div>
           ) : (
             <div className="mt-1">
               <span className="bg-red-950/60 text-red-300 border border-red-800/60 font-semibold text-[11px] px-2.5 py-0.5 rounded-full">
-                {currentPlayer ? `${currentPlayer.username}'s Turn` : "Opponent's Turn"}
+                {currentPlayer ? `${currentPlayer.username}'s Turn · ${secondsLeft}s` : "Opponent's Turn"}
               </span>
             </div>
           )}
@@ -265,43 +299,16 @@ export function GameTable() {
 
 // ── Position Opponents around the table perimeter ─
 function getOpponentPosition(total: number, index: number): { x: number; y: number } {
-  if (total === 1) return { x: 50, y: 15 };
-  if (total === 2) {
-    return [{ x: 28, y: 18 }, { x: 72, y: 18 }][index]!;
-  }
-  if (total === 3) {
-    return [{ x: 20, y: 28 }, { x: 50, y: 14 }, { x: 80, y: 28 }][index]!;
-  }
-  if (total === 4) {
-    return [
-      { x: 18, y: 28 },
-      { x: 38, y: 14 },
-      { x: 62, y: 14 },
-      { x: 82, y: 28 },
-    ][index]!;
-  }
-  // 5+ opponents (matches reference with 5 seats around perimeter)
-  const arcMap: Record<number, { x: number; y: number }[]> = {
-    5: [
-      { x: 16, y: 24 }, // Top Left (Riya)
-      { x: 50, y: 12 }, // Top Center (Aryan)
-      { x: 84, y: 24 }, // Top Right (Karan)
-      { x: 16, y: 56 }, // Mid-Low Left (Neha)
-      { x: 84, y: 56 }, // Mid-Low Right (Rahul)
-    ],
+  const slots: Record<number, { x: number; y: number }[]> = {
+    1: [{ x: 50, y: 16 }],
+    2: [{ x: 18, y: 32 }, { x: 82, y: 32 }],
+    3: [{ x: 16, y: 27 }, { x: 50, y: 13 }, { x: 84, y: 27 }],
+    4: [{ x: 13, y: 32 }, { x: 34, y: 13 }, { x: 66, y: 13 }, { x: 87, y: 32 }],
+    5: [{ x: 11, y: 36 }, { x: 28, y: 15 }, { x: 50, y: 10 }, { x: 72, y: 15 }, { x: 89, y: 36 }],
+    6: [{ x: 10, y: 32 }, { x: 23, y: 14 }, { x: 41, y: 9 }, { x: 59, y: 9 }, { x: 77, y: 14 }, { x: 90, y: 32 }],
+    7: [{ x: 9, y: 33 }, { x: 19, y: 16 }, { x: 33, y: 10 }, { x: 50, y: 8 }, { x: 67, y: 10 }, { x: 81, y: 16 }, { x: 91, y: 33 }],
+    8: [{ x: 8, y: 34 }, { x: 17, y: 18 }, { x: 29, y: 11 }, { x: 43, y: 8 }, { x: 57, y: 8 }, { x: 71, y: 11 }, { x: 83, y: 18 }, { x: 92, y: 34 }],
+    9: [{ x: 7, y: 34 }, { x: 15, y: 20 }, { x: 26, y: 12 }, { x: 38, y: 8 }, { x: 50, y: 7 }, { x: 62, y: 8 }, { x: 74, y: 12 }, { x: 85, y: 20 }, { x: 93, y: 34 }],
   };
-
-  if (arcMap[total]) {
-    return arcMap[total]![index]!;
-  }
-
-  // General parametric ellipse calculation for N opponents
-  // Arc spans from angle 200 deg to 340 deg (counter-clockwise across top and sides)
-  const startAngle = (210 * Math.PI) / 180;
-  const endAngle = (330 * Math.PI) / 180;
-  const angle = startAngle + (index / (total - 1)) * (endAngle - startAngle);
-
-  const x = 50 + 38 * Math.cos(angle);
-  const y = 35 + 24 * Math.sin(angle);
-  return { x, y };
+  return slots[total]?.[index] ?? { x: 50, y: 12 };
 }

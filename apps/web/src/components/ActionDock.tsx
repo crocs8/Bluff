@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RANKS, type Rank } from '@bluff/shared';
 import { CardView } from './shared.js';
 import { useBluffSocket } from '../socket-provider.js';
@@ -10,7 +10,10 @@ export function ActionDock() {
 
   if (!game || !room) return null;
 
-  const { legalActions, hand, roundNumber } = game.game;
+  const { legalActions, hand, roundNumber, roundLockedRank } = game.game;
+  useEffect(() => {
+    setClaimedRank(roundLockedRank ?? 'A');
+  }, [roundNumber, roundLockedRank]);
   const isMyTurn = legalActions.canPlay || legalActions.canSkip || legalActions.canCallBluff;
 
   function toggleCard(id: string) {
@@ -26,7 +29,7 @@ export function ActionDock() {
 
   function handlePlay() {
     if (selected.length === 0 || !legalActions.canPlay || submitting) return;
-    play(selected, claimedRank);
+    play(selected, roundLockedRank ?? claimedRank);
     setSelected([]);
   }
 
@@ -106,9 +109,11 @@ export function ActionDock() {
               key={r}
               type="button"
               onClick={() => setClaimedRank(r)}
+              disabled={roundLockedRank !== undefined}
               className={[
                 'rank-strip-btn min-w-[1.65rem] h-8 rounded text-xs font-bold shrink-0 transition-transform active:scale-95',
                 claimedRank === r ? 'active' : '',
+                roundLockedRank !== undefined ? 'opacity-70 cursor-not-allowed' : '',
               ].join(' ')}
             >
               {r}
@@ -169,7 +174,7 @@ export function ActionDock() {
           💬
         </button>
         <span className="font-semibold text-[11px] text-zinc-400 tracking-wider">
-          Game #{roundNumber}
+          {roundLockedRank ? `ROUND RANK: ${roundLockedRank}` : `Game #${roundNumber}`}
         </span>
         <button type="button" className="p-1 rounded hover:text-zinc-300 active:scale-95" title="Audio">
           🔊

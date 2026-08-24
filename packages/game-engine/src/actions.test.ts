@@ -33,9 +33,20 @@ describe('PLAY', () => {
     expect(next.players.get('A')!.hand.map((card) => card.id)).not.toContain(selected);
     expect(next.playingPile.map((card) => card.id)).toEqual([selected]);
     expect(next.lastPlay?.claimedRank).toBe('K');
+    expect(next.roundLockedRank).toBe('K');
     expect(next.lastPlayedBy).toBe('A');
     expect(next.currentPlayerId).toBe('B');
     expect(state.players.get('A')!.hand.map((card) => card.id)).toContain(selected);
+  });
+
+  it('locks the first claim while allowing later players to play any physical cards', () => {
+    let state = game();
+    state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [cardId(state, 'A', 'A')], claimedRank: 'K' }));
+    const laterCard = cardId(state, 'B', '2');
+    expect(applyAction(state, 'B', { type: 'PLAY', cardIds: [laterCard], claimedRank: 'A' })).toMatchObject({ ok: false, error: { code: 'INVALID_CLAIMED_RANK' } });
+    state = accepted(applyAction(state, 'B', { type: 'PLAY', cardIds: [laterCard], claimedRank: 'K' }));
+    expect(state.lastPlay?.claimedRank).toBe('K');
+    expect(state.roundLockedRank).toBe('K');
   });
 
   it('rejects zero cards, too many cards, duplicate IDs, and cards not owned by the actor', () => {
@@ -80,13 +91,23 @@ describe('SKIP and natural rounds', () => {
     expect(state.lastPlay).toBeUndefined();
     expect(state.currentPlayerId).toBe('A');
     expect(state.roundNumber).toBe(2);
+    expect(state.roundLockedRank).toBeUndefined();
+  });
+
+  it('times out an unstarted round without selecting a rank', () => {
+    let state = game();
+    state = accepted(applyAction(state, 'A', { type: 'TIMEOUT' }));
+    expect(state.currentPlayerId).toBe('B');
+    expect(state.roundLockedRank).toBeUndefined();
+    state = accepted(applyAction(state, 'B', { type: 'PLAY', cardIds: [cardId(state, 'B')], claimedRank: 'Q' }));
+    expect(state.roundLockedRank).toBe('Q');
   });
 
   it('uses the newest play for the natural-round boundary', () => {
     let state = game(3);
     state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [cardId(state, 'A')], claimedRank: 'A' }));
     state = accepted(applyAction(state, 'B', { type: 'SKIP' }));
-    state = accepted(applyAction(state, 'C', { type: 'PLAY', cardIds: [cardId(state, 'C')], claimedRank: 'K' }));
+    state = accepted(applyAction(state, 'C', { type: 'PLAY', cardIds: [cardId(state, 'C')], claimedRank: 'A' }));
     state = accepted(applyAction(state, 'A', { type: 'SKIP' }));
     state = accepted(applyAction(state, 'B', { type: 'SKIP' }));
     state = accepted(applyAction(state, 'C', { type: 'SKIP' }));
@@ -125,7 +146,7 @@ describe('CALL BLUFF', () => {
   it('only permits the most recent play to be challenged and forbids self-challenge', () => {
     let state = game(4);
     state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [cardId(state, 'A')], claimedRank: 'A' }));
-    state = accepted(applyAction(state, 'B', { type: 'PLAY', cardIds: [cardId(state, 'B')], claimedRank: 'K' }));
+    state = accepted(applyAction(state, 'B', { type: 'PLAY', cardIds: [cardId(state, 'B')], claimedRank: 'A' }));
     state = accepted(applyAction(state, 'C', { type: 'SKIP' }));
     const result = applyAction(state, 'D', { type: 'CALL_BLUFF' });
     expect(result).toMatchObject({ ok: true });

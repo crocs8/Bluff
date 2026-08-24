@@ -18,6 +18,17 @@ export interface RoomSession {
   readonly players: Map<string, SessionPlayer>;
   game: GameState | undefined;
   revision: number;
+  turnDeadlineAt: number | undefined;
+  turnTimer: ReturnType<typeof setTimeout> | undefined;
+  turnToken: number;
+}
+
+export interface GameManagerOptions {
+  readonly now?: () => number;
+  readonly setTimeout?: typeof setTimeout;
+  readonly clearTimeout?: typeof clearTimeout;
+  readonly turnDurationMs?: number;
+  readonly onTimeout?: (room: RoomSession, events: DomainEvent[]) => void;
 }
 
 export class ManagerError extends Error {
@@ -27,11 +38,22 @@ export class ManagerError extends Error {
 export class GameManager {
   private readonly rooms = new Map<string, RoomSession>();
   private readonly playerRoomIds = new Map<string, string>();
-  constructor(private readonly random?: RandomSource) {}
+  private readonly now: () => number;
+  private readonly schedule: typeof setTimeout;
+  private readonly cancel: typeof clearTimeout;
+  private readonly turnDurationMs: number;
+  constructor(private readonly random?: RandomSource, options: GameManagerOptions = {}) {
+    this.now = options.now ?? Date.now;
+    this.schedule = options.setTimeout ?? setTimeout;
+    this.cancel = options.clearTimeout ?? clearTimeout;
+    this.turnDurationMs = options.turnDurationMs ?? 45_000;
+    this.onTimeout = options.onTimeout;
+  }
+  private readonly onTimeout: GameManagerOptions['onTimeout'];
 
   createRoom(username: string, socketId: string): { room: RoomSession; player: SessionPlayer } {
     const player = this.createPlayer(username, socketId);
-    const room: RoomSession = { roomId: this.createRoomId(), hostPlayerId: player.id, numberOfDecks: 1, players: new Map([[player.id, player]]), game: undefined, revision: 0 };
+    const room: RoomSession = { roomId: this.createRoomId(), hostPlayerId: player.id, numberOfDecks: 1, players: new Map([[player.id, player]]), game: undefined, revision: 0, turnDeadlineAt: undefined, turnTimer: undefined, turnToken: 0 };
     this.rooms.set(room.roomId, room);
     this.playerRoomIds.set(player.id, room.roomId);
     return { room, player };
@@ -77,21 +99,25 @@ export class GameManager {
     if (room.players.size < 2) throw new ManagerError('INVALID_ROOM', 'At least two players are required.');
     room.game = createGame({ roomId: room.roomId, numberOfDecks: room.numberOfDecks, players: [...room.players.values()].map(({ id, username }) => ({ id, username })), ...(this.random === undefined ? {} : { random: this.random }) });
     room.revision += 1;
+    this.scheduleTurn(room);
     return room;
   }
 
   applyGameAction(playerId: string, action: GameAction): { room: RoomSession; events: DomainEvent[] } {
     const room = this.requirePlayerRoom(playerId);
     if (!room.game) throw new ManagerError('INVALID_ACTION', 'The game has not started.');
+    this.expireTurnIfNeeded(room);
     const result = applyAction(room.game, playerId, action);
     if (!result.ok) throw new ManagerError(result.error.code, result.error.message);
     room.game = result.state;
     room.revision += 1;
+    this.scheduleTurn(room);
     return { room, events: result.events };
   }
 
   resume(playerId: string, socketId: string): RoomSession {
     const room = this.requirePlayerRoom(playerId);
+    this.expireTurnIfNeeded(room);
     const player = room.players.get(playerId);
     if (!player) throw new ManagerError('INVALID_SESSION', 'Session is not valid for this room.');
     player.socketId = socketId;
@@ -117,12 +143,49 @@ export class GameManager {
 
   getGameView(room: RoomSession, viewerId: string): GameViewEnvelope | undefined {
     if (!room.game) return undefined;
+    this.expireTurnIfNeeded(room);
     const game = getPlayerView(room.game, viewerId);
-    return game && { revision: room.revision, game };
+    return game && { revision: room.revision, ...(room.turnDeadlineAt === undefined ? {} : { turnDeadlineAt: room.turnDeadlineAt }), game };
   }
 
   connectedPlayers(room: RoomSession): SessionPlayer[] { return [...room.players.values()].filter((player) => player.socketId !== undefined); }
   getRoomForPlayer(playerId: string): RoomSession | undefined { const roomId = this.playerRoomIds.get(playerId); return roomId ? this.rooms.get(roomId) : undefined; }
+
+  dispose(): void {
+    for (const room of this.rooms.values()) this.cancelTurn(room);
+  }
+
+  private expireTurnIfNeeded(room: RoomSession): void {
+    if (!room.game || room.turnDeadlineAt === undefined || room.turnDeadlineAt > this.now()) return;
+    this.cancelTurn(room);
+    const playerId = room.game.currentPlayerId;
+    if (!playerId) return;
+    const result = applyAction(room.game, playerId, { type: 'TIMEOUT' });
+    if (!result.ok) return;
+    room.game = result.state;
+    room.revision += 1;
+    this.scheduleTurn(room);
+    this.onTimeout?.(room, result.events);
+  }
+
+  private scheduleTurn(room: RoomSession): void {
+    this.cancelTurn(room);
+    if (!room.game || room.game.phase !== 'PLAYING' || room.game.currentPlayerId === undefined) return;
+    const token = room.turnToken;
+    room.turnDeadlineAt = this.now() + this.turnDurationMs;
+    const deadline = room.turnDeadlineAt;
+    room.turnTimer = this.schedule(() => {
+      if (room.turnToken !== token || room.turnDeadlineAt !== deadline) return;
+      this.expireTurnIfNeeded(room);
+    }, this.turnDurationMs);
+  }
+
+  private cancelTurn(room: RoomSession): void {
+    if (room.turnTimer !== undefined) this.cancel(room.turnTimer);
+    room.turnTimer = undefined;
+    room.turnDeadlineAt = undefined;
+    room.turnToken += 1;
+  }
 
   private createPlayer(username: string, socketId: string): SessionPlayer {
     const normalized = username.trim();

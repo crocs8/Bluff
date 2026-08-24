@@ -9,6 +9,7 @@ export interface PlayerView {
   readonly roundNumber: number;
   readonly seatingOrder: string[];
   readonly currentPlayerId?: string;
+  readonly roundLockedRank?: Rank;
   readonly players: Array<{ readonly id: string; readonly username: string; readonly status: 'CONNECTED' | 'DISCONNECTED' | 'ELIMINATED'; readonly cardCount: number; readonly rank?: number }>;
   readonly hand: Card[];
   readonly playingPileCount: number;
@@ -23,6 +24,7 @@ export function getPlayerView(state: GameState, viewerId: string): PlayerView | 
   return {
     roomId: state.roomId, phase: state.phase, roundNumber: state.roundNumber, seatingOrder: [...state.seatingOrder],
     ...(state.currentPlayerId === undefined ? {} : { currentPlayerId: state.currentPlayerId }),
+    ...(state.roundLockedRank === undefined ? {} : { roundLockedRank: state.roundLockedRank }),
     players: [...state.players.values()].map((player) => ({ id: player.id, username: player.username, status: player.status, cardCount: player.hand.length, ...(player.rank === undefined ? {} : { rank: player.rank }) })),
     hand: [...viewer.hand], playingPileCount: state.playingPile.length,
     ...(state.lastPlay === undefined ? {} : { lastClaim: { playerId: state.lastPlay.playerId, cardCount: state.lastPlay.actualCards.length, claimedRank: state.lastPlay.claimedRank } }),

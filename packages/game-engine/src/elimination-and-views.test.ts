@@ -88,6 +88,7 @@ describe('player-specific views', () => {
     expect(view).not.toHaveProperty('reservePile');
     expect(view).not.toHaveProperty('playingPile');
     expect(view!.lastClaim).toEqual({ playerId: 'A', cardCount: 1, claimedRank: 'K' });
+    expect(view!.roundLockedRank).toBe('K');
     expect(JSON.stringify(view)).not.toContain(played.id);
   });
 

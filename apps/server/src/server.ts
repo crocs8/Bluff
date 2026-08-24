@@ -18,11 +18,18 @@ export interface BluffServer {
   close(): Promise<void>;
 }
 
-export function createBluffServer(options: { random?: RandomSource } = {}): BluffServer {
+export function createBluffServer(options: { random?: RandomSource; now?: () => number; turnDurationMs?: number } = {}): BluffServer {
   const app = express();
   const httpServer = createServer(app);
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, { cors: { origin: true, credentials: false } });
-  const manager = new GameManager(options.random);
+  const manager = new GameManager(options.random, {
+    ...(options.now === undefined ? {} : { now: options.now }),
+    ...(options.turnDurationMs === undefined ? {} : { turnDurationMs: options.turnDurationMs }),
+    onTimeout: (room, events) => {
+      emitDomainEvents(io, room, events);
+      emitGameViews(io, manager, room);
+    },
+  });
 
   app.get('/health', (_request, response) => response.status(200).json({ status: 'ok', uptime: process.uptime() }));
 
@@ -91,7 +98,7 @@ export function createBluffServer(options: { random?: RandomSource } = {}): Bluf
   return {
     app, httpServer, io, manager,
     listen: (port = 0) => new Promise((resolve) => httpServer.listen(port, () => resolve((httpServer.address() as { port: number }).port))),
-    close: () => new Promise((resolve, reject) => io.close((error) => error ? reject(error) : resolve())),
+    close: () => new Promise((resolve, reject) => { manager.dispose(); io.close((error) => error ? reject(error) : resolve()); }),
   };
 }
 

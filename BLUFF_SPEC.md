@@ -206,11 +206,11 @@ A → 2 → 3 → ... → K.
 
 That is NOT how this version of Bluff works.
 
-Instead, every player can choose what rank they CLAIM.
+Instead, the first player who plays in a round chooses the rank for that round. That rank is then locked for every later play until the round ends.
 
 The actual cards they play do not have to match their claim.
 
-This means EVERY player, including the first player of a round, can bluff.
+Every player can still bluff: the actual cards they play do not have to match the locked claim rank.
 
 ---
 
@@ -960,7 +960,7 @@ When selecting a claim:
 
 Display all 13 ranks.
 
-The player chooses the claimed rank independently of the selected cards.
+The round initiator chooses the claimed rank independently of the selected cards. Later plays use the locked round rank automatically.
 
 ---
 
