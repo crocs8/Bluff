@@ -25,18 +25,18 @@ function retainOneCard(state: GameState, playerId: string, rank: string): string
 }
 
 describe('final plays, ranking, and game end', () => {
-  it('ranks a truthful final player when the immediate next player skips, then starts at the next active seat', () => {
+  it('keeps a zero-card player active while the next player receives the required turn', () => {
     let state = game();
     const finalCard = retainOneCard(state, 'A', 'A');
     state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [finalCard], claimedRank: 'A' }));
     const result = applyAction(state, 'B', { type: 'SKIP' });
     state = accepted(result);
 
-    expect(state.players.get('A')).toMatchObject({ status: 'ELIMINATED', rank: 1 });
-    expect(state.rankings).toEqual(['A']);
-    expect(state.currentPlayerId).toBe('B');
-    expect(state.lastPlay).toBeUndefined();
-    expect(result.ok && result.events).toContainEqual(expect.objectContaining({ type: 'RoundEnded', reason: 'FINAL_PLAY_SAFE', starterId: 'B' }));
+    expect(state.players.get('A')).toMatchObject({ status: 'CONNECTED' });
+    expect(state.rankings).toEqual([]);
+    expect(state.currentPlayerId).toBe('C');
+    expect(state.lastPlay?.playerId).toBe('A');
+    expect(result.ok && result.events).not.toContainEqual(expect.objectContaining({ type: 'RoundEnded' }));
   });
 
   it('ranks a truthful final player when challenged and skips that eliminated intended starter', () => {

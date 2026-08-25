@@ -64,7 +64,7 @@ export function ChallengeOverlay() {
   const wasTruthful = challenge.wasTruthful;
   const isBluff = !wasTruthful;
 
-  const pileWinner = isBluff ? challenger : challenged;
+  const pileWinner = players.find((player) => player.id === challenge.pileRecipientId);
   const pileWinnerName = pileWinner?.id === room.selfPlayerId ? 'You' : (pileWinner?.username ?? 'Winner');
 
   return (
@@ -147,7 +147,7 @@ export function ChallengeOverlay() {
           {/* Pile Winner Info */}
           <div className="my-4">
             <p className="text-zinc-200 font-bold text-sm">
-              {isBluff ? `${challengerName} wins the pile` : `${challengedName} takes the pile`}
+              {pileWinnerName} takes the pile
             </p>
             <p className="text-[#f5c451] text-xs font-semibold mt-0.5">
               (+{challenge.revealedCards.length} cards)

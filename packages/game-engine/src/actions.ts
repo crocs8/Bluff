@@ -17,8 +17,9 @@ export type DomainEvent =
   | { readonly type: 'PlayAccepted'; readonly playerId: string; readonly cardCount: number; readonly claimedRank: Rank }
   | { readonly type: 'PlayerSkipped'; readonly playerId: string }
   | { readonly type: 'PlayerTimedOut'; readonly playerId: string }
+  | { readonly type: 'PlayerRemoved'; readonly playerId: string }
   | { readonly type: 'ChallengeCalled'; readonly challengerId: string; readonly challengedPlayerId: string }
-  | { readonly type: 'ChallengeResolved'; readonly challengerId: string; readonly challengedPlayerId: string; readonly claimedRank: Rank; readonly wasTruthful: boolean; readonly revealedCards: Card[] }
+  | { readonly type: 'ChallengeResolved'; readonly challengerId: string; readonly challengedPlayerId: string; readonly pileRecipientId: string; readonly claimedRank: Rank; readonly wasTruthful: boolean; readonly revealedCards: Card[] }
   | { readonly type: 'PlayingPileTransferred'; readonly recipientId: string; readonly cardCount: number }
   | { readonly type: 'PlayerRanked'; readonly playerId: string; readonly rank: number; readonly isLoser: boolean }
   | { readonly type: 'RoundEnded'; readonly reason: 'NATURAL' | 'CHALLENGE' | 'FINAL_PLAY_SAFE'; readonly starterId?: string }
@@ -28,25 +29,44 @@ export type ApplyActionResult =
   | { readonly ok: true; readonly state: GameState; readonly events: DomainEvent[] }
   | { readonly ok: false; readonly error: GameError };
 
+export type RemovePlayerResult =
+  | { readonly ok: true; readonly state: GameState; readonly events: DomainEvent[] }
+  | { readonly ok: false; readonly error: GameError };
+
+export function removePlayer(state: GameState, playerId: string): RemovePlayerResult {
+  const player = state.players.get(playerId);
+  if (!player) return { ok: false, error: error('PLAYER_NOT_FOUND', 'Player does not belong to this game.') };
+  const draft = cloneState(state);
+  draft.players.delete(playerId);
+  draft.seatingOrder = draft.seatingOrder.filter((id) => id !== playerId);
+  draft.discardPile.push(...player.hand);
+  const events: DomainEvent[] = [{ type: 'PlayerRemoved', playerId }];
+  const removedLastPlay = draft.lastPlayedBy === playerId;
+  if (removedLastPlay) {
+    draft.discardPile.push(...draft.playingPile);
+    draft.playingPile = [];
+    draft.lastPlay = undefined;
+    draft.lastPlayedBy = undefined;
+    draft.roundLockedRank = undefined;
+    draft.roundNumber += 1;
+  }
+  const active = activePlayerIds(draft);
+  if (active.size === 0) {
+    draft.phase = 'GAME_END';
+    draft.currentPlayerId = undefined;
+  } else if (active.size === 1) {
+    completeGameIfOnePlayerRemains(draft, events);
+  } else if (draft.currentPlayerId === playerId || removedLastPlay) {
+    draft.currentPlayerId = nextActivePlayerAtOrAfter(draft.seatingOrder, active, playerId);
+  }
+  return { ok: true, state: draft, events };
+}
+
 export function applyAction(state: GameState, actorId: string, action: GameAction): ApplyActionResult {
   const validationError = validateActor(state, actorId, action);
   if (validationError) return { ok: false, error: validationError };
   const draft = cloneState(state);
   const events: DomainEvent[] = [];
-  const finalizedFinalPlay = action.type !== 'CALL_BLUFF' && finalizeSafeFinalPlayIfNeeded(draft, actorId, events);
-  if (finalizedFinalPlay && draft.phase !== 'PLAYING') {
-    if (action.type === 'SKIP') events.unshift({ type: 'PlayerSkipped', playerId: actorId });
-    if (action.type === 'TIMEOUT') events.unshift({ type: 'PlayerTimedOut', playerId: actorId });
-    return { ok: true, state: draft, events };
-  }
-  if (finalizedFinalPlay && action.type === 'SKIP') {
-    events.unshift({ type: 'PlayerSkipped', playerId: actorId });
-    return { ok: true, state: draft, events };
-  }
-  if (finalizedFinalPlay && action.type === 'TIMEOUT') {
-    events.unshift({ type: 'PlayerTimedOut', playerId: actorId });
-    return { ok: true, state: draft, events };
-  }
   if (action.type === 'PLAY') applyPlay(draft, actorId, action, events);
   else if (action.type === 'SKIP') applySkip(draft, actorId, events);
   else if (action.type === 'TIMEOUT') applyTimeout(draft, actorId, events);
@@ -95,13 +115,19 @@ function applyPlay(draft: MutableGameState, actorId: string, action: Extract<Gam
 
 function applySkip(draft: MutableGameState, actorId: string, events: DomainEvent[]): void {
   events.push({ type: 'PlayerSkipped', playerId: actorId });
-  if (draft.lastPlayedBy === actorId) closeRound(draft, actorId, 'NATURAL', events);
+  if (draft.lastPlayedBy === actorId) {
+    if (draft.players.get(actorId)!.hand.length === 0) rankPlayer(draft, actorId, events);
+    closeRound(draft, actorId, 'NATURAL', events);
+  }
   else draft.currentPlayerId = nextActivePlayerId(draft.seatingOrder, activePlayerIds(draft), actorId);
 }
 
 function applyTimeout(draft: MutableGameState, actorId: string, events: DomainEvent[]): void {
   events.push({ type: 'PlayerTimedOut', playerId: actorId });
-  if (draft.lastPlayedBy === actorId) closeRound(draft, actorId, 'NATURAL', events);
+  if (draft.lastPlayedBy === actorId) {
+    if (draft.players.get(actorId)!.hand.length === 0) rankPlayer(draft, actorId, events);
+    closeRound(draft, actorId, 'NATURAL', events);
+  }
   else draft.currentPlayerId = nextActivePlayerId(draft.seatingOrder, activePlayerIds(draft), actorId);
 }
 
@@ -115,23 +141,15 @@ function applyChallenge(draft: MutableGameState, challengerId: string, events: D
   draft.players.get(recipientId)!.hand.push(...pile);
   draft.playingPile = [];
   events.push({ type: 'PlayingPileTransferred', recipientId, cardCount: pile.length });
-  events.push({ type: 'ChallengeResolved', challengerId, challengedPlayerId, claimedRank: lastPlay.claimedRank, wasTruthful, revealedCards: [...lastPlay.actualCards] });
+  events.push({ type: 'ChallengeResolved', challengerId, challengedPlayerId, pileRecipientId: recipientId, claimedRank: lastPlay.claimedRank, wasTruthful, revealedCards: [...lastPlay.actualCards] });
   if (wasTruthful && draft.players.get(challengedPlayerId)!.hand.length === 0) rankPlayer(draft, challengedPlayerId, events);
   closeRound(draft, wasTruthful ? challengedPlayerId : challengerId, 'CHALLENGE', events);
 }
 
-function finalizeSafeFinalPlayIfNeeded(draft: MutableGameState, actorId: string, events: DomainEvent[]): boolean {
-  const lastPlay = draft.lastPlay;
-  if (!lastPlay || lastPlay.playerId === actorId) return false;
-  const lastPlayer = draft.players.get(lastPlay.playerId)!;
-  if (lastPlayer.hand.length !== 0) return false;
-  rankPlayer(draft, lastPlayer.id, events);
-  closeRound(draft, lastPlayer.id, 'FINAL_PLAY_SAFE', events);
-  return true;
-}
-
 function closeRound(draft: MutableGameState, intendedStarter: string, reason: Extract<DomainEvent, { type: 'RoundEnded' }>['reason'], events: DomainEvent[]): void {
   if (completeGameIfOnePlayerRemains(draft, events)) return;
+  draft.discardPile.push(...draft.playingPile);
+  draft.playingPile = [];
   draft.lastPlay = undefined;
   draft.lastPlayedBy = undefined;
   draft.roundLockedRank = undefined;
@@ -173,7 +191,7 @@ function activePlayerIds(state: Pick<GameState, 'players'>): Set<string> {
 
 interface MutableGameState {
   roomId: string; numberOfDecks: 1 | 2; phase: GameState['phase']; seatingOrder: string[];
-  players: Map<string, MutableGamePlayer>; reservePile: Card[]; playingPile: Card[];
+  players: Map<string, MutableGamePlayer>; reservePile: Card[]; discardPile: Card[]; playingPile: Card[];
   currentPlayerId: string | undefined; roundLockedRank: Rank | undefined; lastPlay: LastPlay | undefined; lastPlayedBy: string | undefined; rankings: string[]; roundNumber: number;
 }
 
@@ -186,7 +204,7 @@ function cloneState(state: GameState): MutableGameState {
     ...state,
     seatingOrder: [...state.seatingOrder],
     players: new Map([...state.players.entries()].map(([id, player]) => [id, { ...player, hand: [...player.hand] }])),
-    reservePile: [...state.reservePile], playingPile: [...state.playingPile],
+    reservePile: [...state.reservePile], discardPile: [...state.discardPile], playingPile: [...state.playingPile],
     roundLockedRank: state.roundLockedRank,
     lastPlay: state.lastPlay === undefined ? undefined : { ...state.lastPlay, actualCards: [...state.lastPlay.actualCards] },
     lastPlayedBy: state.lastPlayedBy,
