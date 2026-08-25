@@ -147,16 +147,4 @@ describe('real-time room and game synchronization', () => {
     expect(await emitAck(resumed, 'session:resume', { playerId })).toMatchObject({ ok: true, roomId: room.roomId });
     expect((await resumedView).revision).toBe(3);
   });
-
-  it('lets the host remove a connected player and broadcasts the updated membership', async () => {
-    const host = await connect();
-    const target = await connect();
-    const room = await createRoom(host, 'Ada');
-    const joined = await emitAck(target, 'room:join', { roomId: room.roomId!, username: 'Ben' });
-    const updatedRoom = onceMatching<{ revision: number; players: Array<{ id: string }> }>(host, 'room:view', (view) => view.revision === 2);
-    const disconnected = new Promise<void>((resolve) => target.once('disconnect', () => resolve()));
-    expect(await emitAck(host, 'room:remove-player', { playerId: joined.playerId! })).toMatchObject({ ok: true, revision: 2 });
-    expect((await updatedRoom).players.map((player) => player.id)).toEqual([room.playerId]);
-    await disconnected;
-  });
 });

@@ -8,7 +8,7 @@ This document records the rule decisions approved after the initial architecture
 - Reaching zero cards does not itself finish a player. The final play remains challengeable by the next current player under the normal rules.
 - If that final play is challenged and truthful, the challenger takes the whole `playingPile`; the player finishes, receives the next placement, and is removed from active turn rotation.
 - If it is challenged and a bluff, the player takes the whole `playingPile`, remains active, and the successful challenger is the intended next-round starter.
-- The next player must still receive the normal opportunity to challenge, play, or skip. A zero-card player is finalized only when the legitimate round-ending condition is reached.
+- If the next player skips, the final play becomes safe and the player finishes. A finished player never takes another turn.
 
 ## Round starters and eliminated players
 
@@ -31,9 +31,3 @@ This document records the rule decisions approved after the initial architecture
 - Every active turn has a 45-second server-authoritative deadline.
 - A normal timeout follows the existing skip behavior. If the round has no play yet, a timeout advances the initiator without selecting a rank, allowing the next player to initiate.
 - The client may display the remaining deadline and may vibrate for 200ms when the local turn begins; neither affects authoritative gameplay.
-
-## Host removal and reconnection
-
-- The room host may remove another player, but may not remove themselves. The server removes the player from the room and active game, discards their cards, invalidates any affected turn timer, and broadcasts the new state.
-- Removing the current player advances immediately to the next active seat. Removing another player preserves the current turn and its existing deadline.
-- A stored valid player session may resume after a page reload or reconnect. An invalid session is cleared and cannot create access to another room.

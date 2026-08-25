@@ -36,7 +36,7 @@ function game(currentPlayerId: string): GameViewEnvelope {
 function socketValue(currentPlayerId: string) {
   return {
     connection: 'CONNECTED' as const, room, game: game(currentPlayerId), challenge: undefined, lastEvent: undefined,
-    error: undefined, submitting: false, create: vi.fn(), join: vi.fn(), removePlayer: vi.fn(), configure: vi.fn(), start: vi.fn(), play: vi.fn(), skip: vi.fn(), callBluff: vi.fn(), clearChallenge: vi.fn(), clearError: vi.fn(),
+    error: undefined, submitting: false, create: vi.fn(), join: vi.fn(), configure: vi.fn(), start: vi.fn(), play: vi.fn(), skip: vi.fn(), callBluff: vi.fn(), clearChallenge: vi.fn(), clearError: vi.fn(),
   };
 }
 

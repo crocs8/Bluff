@@ -29,7 +29,6 @@ export interface SocketState {
   // Actions
   create(username: string): void;
   join(roomId: string, username: string): void;
-  removePlayer(playerId: string): void;
   configure(decks: 1 | 2): void;
   start(): void;
   play(cardIds: string[], claimedRank: Rank): void;
@@ -70,11 +69,10 @@ export function SocketProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     function handleConnect() {
       const playerId = localStorage.getItem(SESSION_KEY);
-      if (playerId) {
-        // Resume both after reconnect and after a full page reload.
+      if (playerId && didConnect.current) {
+        // Reconnect — resume existing session
         setConnection('RECONNECTING');
         socket.emit('session:resume', { playerId }, (ack: { ok: boolean; message?: string }) => {
-          if (!ack.ok) localStorage.removeItem(SESSION_KEY);
           setConnection(ack.ok ? 'RECONNECTED' : 'CONNECTED');
           setTimeout(() => setConnection('CONNECTED'), 2500);
         });
@@ -145,7 +143,6 @@ export function SocketProvider({ children }: PropsWithChildren) {
       submitting,
       create: (username) => send('room:create', { username }),
       join: (roomId, username) => send('room:join', { roomId, username }),
-      removePlayer: (playerId) => send('room:remove-player', { playerId }),
       configure: (numberOfDecks) => send('room:configure', { numberOfDecks }),
       start: () => send('room:start', {}),
       play: (cardIds, claimedRank) => send('game:play', { cardIds, claimedRank }),

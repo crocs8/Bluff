@@ -79,7 +79,7 @@ describe('SKIP and natural rounds', () => {
     expect(getLegalActions(state, 'C').canCallBluff).toBe(true);
   });
 
-  it('ends A-play, B-skip, C-skip, A-skip naturally and discards the completed pile', () => {
+  it('ends A-play, B-skip, C-skip, A-skip naturally and retains the playing pile', () => {
     let state = game(3);
     state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [cardId(state, 'A')], claimedRank: 'A' }));
     state = accepted(applyAction(state, 'B', { type: 'SKIP' }));
@@ -87,8 +87,7 @@ describe('SKIP and natural rounds', () => {
     const result = applyAction(state, 'A', { type: 'SKIP' });
     state = accepted(result);
     expect(result.ok && result.events).toContainEqual(expect.objectContaining({ type: 'RoundEnded', reason: 'NATURAL', starterId: 'A' }));
-    expect(state.playingPile).toHaveLength(0);
-    expect(state.discardPile).toHaveLength(1);
+    expect(state.playingPile).toHaveLength(1);
     expect(state.lastPlay).toBeUndefined();
     expect(state.currentPlayerId).toBe('A');
     expect(state.roundNumber).toBe(2);
@@ -114,21 +113,7 @@ describe('SKIP and natural rounds', () => {
     state = accepted(applyAction(state, 'C', { type: 'SKIP' }));
     expect(state.lastPlay).toBeUndefined();
     expect(state.currentPlayerId).toBe('C');
-    expect(state.playingPile).toHaveLength(0);
-    expect(state.discardPile).toHaveLength(2);
-  });
-
-  it('keeps completed-round cards out of later round challenges', () => {
-    let state = game(3);
-    const firstCard = cardId(state, 'A');
-    state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [firstCard], claimedRank: 'A' }));
-    state = accepted(applyAction(state, 'B', { type: 'SKIP' }));
-    state = accepted(applyAction(state, 'C', { type: 'SKIP' }));
-    state = accepted(applyAction(state, 'A', { type: 'SKIP' }));
-    const nextCard = cardId(state, 'A');
-    state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [nextCard], claimedRank: 'K' }));
-    expect(state.playingPile.map((card) => card.id)).toEqual([nextCard]);
-    expect(state.discardPile.map((card) => card.id)).toContain(firstCard);
+    expect(state.playingPile).toHaveLength(2);
   });
 });
 

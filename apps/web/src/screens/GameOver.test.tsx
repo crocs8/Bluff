@@ -58,7 +58,6 @@ describe('GameOver Screen', () => {
       submitting: false,
       create: vi.fn(),
       join: vi.fn(),
-      removePlayer: vi.fn(),
       configure: vi.fn(),
       start: vi.fn(),
       play: vi.fn(),

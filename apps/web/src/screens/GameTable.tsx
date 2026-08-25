@@ -40,7 +40,7 @@ function formatClaimText(count: number, rank: Rank): string {
 }
 
 export function GameTable() {
-  const { game, room, lastEvent, removePlayer } = useBluffSocket();
+  const { game, room, lastEvent } = useBluffSocket();
   const [showMenu, setShowMenu] = useState(false);
   const [roundToast, setRoundToast] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -163,7 +163,7 @@ export function GameTable() {
         {/* ── Central Claim Plaque & Pile ─────────── */}
         <div className="absolute inset-x-8 top-[58%] -translate-y-1/2 text-center pointer-events-none z-10 flex flex-col items-center">
           {/* Claim Plaque */}
-          <div className="claim-plaque rounded-2xl px-5 py-2.5 max-w-56 w-full mb-1">
+          <div className="claim-plaque rounded-2xl px-5 py-2.5 max-w-[14rem] w-full mb-1">
             <p className="text-[10px] text-zinc-400 uppercase font-semibold tracking-wider">
               LAST PLAY BY
             </p>
@@ -266,11 +266,6 @@ export function GameTable() {
             </div>
 
             <div className="space-y-2 text-sm">
-              {room.selfPlayerId === room.hostPlayerId && state.players.filter((player) => player.id !== room.selfPlayerId && player.status !== 'ELIMINATED').map((player) => (
-                <button key={player.id} type="button" onClick={() => removePlayer(player.id)} className="w-full p-3 rounded-xl bg-red-950/40 border border-red-800/70 flex items-center justify-between text-red-300">
-                  <span>Remove {player.username}</span><span className="text-[10px] uppercase">Host</span>
-                </button>
-              ))}
               <div className="p-3 rounded-xl bg-black/40 border border-zinc-800 flex items-center justify-between">
                 <span className="text-zinc-300">⚙ Settings</span>
                 <span className="text-zinc-500 text-xs">Default</span>

@@ -7,13 +7,13 @@ export function ActionDock() {
   const { game, room, play, skip, callBluff, submitting, error, clearError } = useBluffSocket();
   const [selected, setSelected] = useState<string[]>([]);
   const [claimedRank, setClaimedRank] = useState<Rank>('A');
-  useEffect(() => {
-    setClaimedRank(game?.game.roundLockedRank ?? 'A');
-  }, [game?.game.roundNumber, game?.game.roundLockedRank]);
 
   if (!game || !room) return null;
 
   const { legalActions, hand, roundNumber, roundLockedRank } = game.game;
+  useEffect(() => {
+    setClaimedRank(roundLockedRank ?? 'A');
+  }, [roundNumber, roundLockedRank]);
   const isMyTurn = legalActions.canPlay || legalActions.canSkip || legalActions.canCallBluff;
 
   function toggleCard(id: string) {

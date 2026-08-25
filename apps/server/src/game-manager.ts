@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
-import { applyAction, createGame, getPlayerView, removePlayer, type DomainEvent, type GameAction, type GameState, type RandomSource } from '@bluff/game-engine';
+import { applyAction, createGame, getPlayerView, type DomainEvent, type GameAction, type GameState, type RandomSource } from '@bluff/game-engine';
 import type { DeckCount } from '@bluff/shared';
 
 import type { GameViewEnvelope, RoomView } from './contracts.js';
@@ -113,31 +113,6 @@ export class GameManager {
     room.revision += 1;
     this.scheduleTurn(room);
     return { room, events: result.events };
-  }
-
-  removePlayer(requesterId: string, targetId: string): { room: RoomSession; removed: SessionPlayer; events: DomainEvent[] } {
-    const room = this.requirePlayerRoom(requesterId);
-    if (room.hostPlayerId !== requesterId) throw new ManagerError('NOT_HOST', 'Only the host can remove players.');
-    if (requesterId === targetId) throw new ManagerError('INVALID_ACTION', 'The host cannot remove themselves.');
-    const removed = room.players.get(targetId);
-    if (!removed) throw new ManagerError('PLAYER_NOT_FOUND', 'Player does not belong to this room.');
-    const currentPlayerId = room.game?.currentPlayerId;
-    const events: DomainEvent[] = [];
-    if (room.game) {
-      const result = removePlayer(room.game, targetId);
-      if (!result.ok) throw new ManagerError(result.error.code, result.error.message);
-      room.game = result.state;
-      events.push(...result.events);
-      room.revision += 1;
-      const updatedGame = room.game;
-      if (!updatedGame) throw new ManagerError('INVALID_ACTION', 'The game state could not be updated.');
-      if (updatedGame.phase !== 'PLAYING' || updatedGame.currentPlayerId !== currentPlayerId) this.scheduleTurn(room);
-    } else {
-      room.revision += 1;
-    }
-    room.players.delete(targetId);
-    this.playerRoomIds.delete(targetId);
-    return { room, removed, events };
   }
 
   resume(playerId: string, socketId: string): RoomSession {

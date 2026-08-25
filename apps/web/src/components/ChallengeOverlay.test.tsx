@@ -57,7 +57,6 @@ describe('ChallengeOverlay Component', () => {
   const mockBluffChallenge: ChallengeResult = {
     challengerId: 'p1',
     challengedPlayerId: 'p2',
-    pileRecipientId: 'p2',
     claimedRank: 'A',
     revealedCards: [
       { id: 'c1', rank: 'K', suit: 'hearts', deckIndex: 0 },
@@ -78,7 +77,6 @@ describe('ChallengeOverlay Component', () => {
       submitting: false,
       create: vi.fn(),
       join: vi.fn(),
-      removePlayer: vi.fn(),
       configure: vi.fn(),
       start: vi.fn(),
       play: vi.fn(),
@@ -104,7 +102,7 @@ describe('ChallengeOverlay Component', () => {
       vi.advanceTimersByTime(1300);
     });
     expect(screen.getByText('BLUFF!')).toBeInTheDocument();
-    expect(screen.getByText(/takes the pile/i)).toBeInTheDocument();
+    expect(screen.getByText(/wins the pile/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /CONTINUE/i })).toBeInTheDocument();
   });
 });

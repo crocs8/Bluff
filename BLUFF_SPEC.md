@@ -549,8 +549,6 @@ Then:
 
 The reserve pile is completely separate and must never be added to the playing pile.
 
-At every round boundary, any remaining completed-round playing cards move to a discard pile and the next round begins with an empty `playingPile`. Discarded cards are never reused in a later challenge.
-
 ---
 
 # 21. Winning / Elimination
@@ -808,12 +806,6 @@ On reconnect:
 * send current authorized game state
 
 Do not reveal hidden information.
-
-The original player/session identifier is retained in browser storage so a valid session may resume after a reconnect or page reload. An invalid session must not grant access to any room.
-
-The room host may remove another player from the room or active game, but may not remove themselves. Removing the current player immediately advances the turn and invalidates the old deadline; removing another player preserves the current turn and deadline.
-
-Every active turn has a 45-second server-authoritative deadline. Expiry performs the normal automatic timeout transition, while the client only displays the remaining time. On an unstarted round, expiry advances the initiator without selecting a rank.
 
 ---
 

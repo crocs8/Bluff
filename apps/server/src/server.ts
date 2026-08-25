@@ -72,17 +72,6 @@ export function createBluffServer(options: { random?: RandomSource; now?: () => 
       return { revision: 0 };
     }));
 
-    socket.on('room:remove-player', (payload, ack) => execute(socket, ack, () => {
-      const { room, removed, events } = manager.removePlayer(requirePlayerId(socket), payload.playerId);
-      if (removed.socketId) io.sockets.sockets.get(removed.socketId)?.disconnect(true);
-      emitRoomViews(io, manager, room);
-      if (room.game) {
-        emitDomainEvents(io, room, events);
-        emitGameViews(io, manager, room);
-      }
-      return { revision: room.revision };
-    }));
-
     socket.on('room:configure', (payload, ack) => execute(socket, ack, () => {
       const room = manager.configureRoom(requirePlayerId(socket), payload.numberOfDecks);
       emitRoomViews(io, manager, room);
@@ -150,10 +139,10 @@ function emitGameViews(io: BluffServer['io'], manager: GameManager, room: RoomSe
 function emitDomainEvents(io: BluffServer['io'], room: RoomSession, events: DomainEvent[]): void {
   for (const event of events) {
     if (event.type === 'ChallengeResolved') {
-      io.to(room.roomId).emit('game:challenge-result', { challengerId: event.challengerId, challengedPlayerId: event.challengedPlayerId, pileRecipientId: event.pileRecipientId, claimedRank: event.claimedRank, revealedCards: event.revealedCards, wasTruthful: event.wasTruthful, revision: room.revision });
+      io.to(room.roomId).emit('game:challenge-result', { challengerId: event.challengerId, challengedPlayerId: event.challengedPlayerId, claimedRank: event.claimedRank, revealedCards: event.revealedCards, wasTruthful: event.wasTruthful, revision: room.revision });
     }
     const publicEvent: PublicGameEvent = event.type === 'ChallengeResolved'
-      ? { type: event.type, challengerId: event.challengerId, challengedPlayerId: event.challengedPlayerId, pileRecipientId: event.pileRecipientId, wasTruthful: event.wasTruthful }
+      ? { type: event.type, challengerId: event.challengerId, challengedPlayerId: event.challengedPlayerId, wasTruthful: event.wasTruthful }
       : event;
     io.to(room.roomId).emit('game:event', { ...publicEvent, revision: room.revision });
   }

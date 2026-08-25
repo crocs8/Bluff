@@ -25,14 +25,12 @@ export type PublicGameEvent = Exclude<DomainEvent, { type: 'ChallengeResolved' }
   readonly type: 'ChallengeResolved';
   readonly challengerId: string;
   readonly challengedPlayerId: string;
-  readonly pileRecipientId: string;
   readonly wasTruthful: boolean;
 };
 
 export interface ChallengeResult {
   readonly challengerId: string;
   readonly challengedPlayerId: string;
-  readonly pileRecipientId: string;
   readonly claimedRank: Rank;
   readonly revealedCards: Card[];
   readonly wasTruthful: boolean;
@@ -43,7 +41,6 @@ export interface ClientToServerEvents {
   'room:create': (payload: { username: string }, ack: Ack) => void;
   'room:join': (payload: { roomId: string; username: string }, ack: Ack) => void;
   'room:leave': (payload: Record<string, never>, ack: Ack) => void;
-  'room:remove-player': (payload: { playerId: string }, ack: Ack) => void;
   'room:configure': (payload: { numberOfDecks: DeckCount }, ack: Ack) => void;
   'room:start': (payload: Record<string, never>, ack: Ack) => void;
   'game:play': (payload: { cardIds: string[]; claimedRank: Rank }, ack: Ack) => void;
