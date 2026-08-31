@@ -9,7 +9,18 @@ export type GameAction =
   | { readonly type: 'CALL_BLUFF' }
   | { readonly type: 'TIMEOUT' };
 
-export type GameErrorCode = 'GAME_NOT_PLAYING' | 'PLAYER_NOT_FOUND' | 'PLAYER_ELIMINATED' | 'NOT_YOUR_TURN' | 'PLAY_REQUIRED' | 'NO_PLAY_TO_CHALLENGE' | 'SELF_CHALLENGE_FORBIDDEN' | 'INVALID_CARD_COUNT' | 'DUPLICATE_CARD_ID' | 'CARD_NOT_OWNED' | 'INVALID_CLAIMED_RANK';
+export type GameErrorCode =
+  | 'GAME_NOT_PLAYING'
+  | 'PLAYER_NOT_FOUND'
+  | 'PLAYER_ELIMINATED'
+  | 'NOT_YOUR_TURN'
+  | 'PLAY_REQUIRED'
+  | 'NO_PLAY_TO_CHALLENGE'
+  | 'SELF_CHALLENGE_FORBIDDEN'
+  | 'INVALID_CARD_COUNT'
+  | 'DUPLICATE_CARD_ID'
+  | 'CARD_NOT_OWNED'
+  | 'INVALID_CLAIMED_RANK';
 
 export interface GameError { readonly code: GameErrorCode; readonly message: string; }
 
@@ -33,24 +44,12 @@ export function applyAction(state: GameState, actorId: string, action: GameActio
   if (validationError) return { ok: false, error: validationError };
   const draft = cloneState(state);
   const events: DomainEvent[] = [];
-  const finalizedFinalPlay = action.type !== 'CALL_BLUFF' && finalizeSafeFinalPlayIfNeeded(draft, actorId, events);
-  if (finalizedFinalPlay && draft.phase !== 'PLAYING') {
-    if (action.type === 'SKIP') events.unshift({ type: 'PlayerSkipped', playerId: actorId });
-    if (action.type === 'TIMEOUT') events.unshift({ type: 'PlayerTimedOut', playerId: actorId });
-    return { ok: true, state: draft, events };
-  }
-  if (finalizedFinalPlay && action.type === 'SKIP') {
-    events.unshift({ type: 'PlayerSkipped', playerId: actorId });
-    return { ok: true, state: draft, events };
-  }
-  if (finalizedFinalPlay && action.type === 'TIMEOUT') {
-    events.unshift({ type: 'PlayerTimedOut', playerId: actorId });
-    return { ok: true, state: draft, events };
-  }
+
   if (action.type === 'PLAY') applyPlay(draft, actorId, action, events);
   else if (action.type === 'SKIP') applySkip(draft, actorId, events);
   else if (action.type === 'TIMEOUT') applyTimeout(draft, actorId, events);
   else applyChallenge(draft, actorId, events);
+
   return { ok: true, state: draft, events };
 }
 
@@ -80,6 +79,11 @@ function validatePlay(player: GamePlayer, decks: 1 | 2, roundLockedRank: Rank | 
 }
 
 function applyPlay(draft: MutableGameState, actorId: string, action: Extract<GameAction, { type: 'PLAY' }>, events: DomainEvent[]): void {
+  // If the previous play was by a player who now has 0 cards, their play is permanently safe
+  if (draft.lastPlay && draft.players.get(draft.lastPlay.playerId)?.hand.length === 0) {
+    rankPlayer(draft, draft.lastPlay.playerId, events);
+    if (completeGameIfOnePlayerRemains(draft, events)) return;
+  }
   const player = draft.players.get(actorId)!;
   const selectedIds = new Set(action.cardIds);
   const selectedCards = player.hand.filter((card) => selectedIds.has(card.id));
@@ -116,22 +120,23 @@ function applyChallenge(draft: MutableGameState, challengerId: string, events: D
   draft.playingPile = [];
   events.push({ type: 'PlayingPileTransferred', recipientId, cardCount: pile.length });
   events.push({ type: 'ChallengeResolved', challengerId, challengedPlayerId, claimedRank: lastPlay.claimedRank, wasTruthful, revealedCards: [...lastPlay.actualCards] });
-  if (wasTruthful && draft.players.get(challengedPlayerId)!.hand.length === 0) rankPlayer(draft, challengedPlayerId, events);
+  if (wasTruthful && draft.players.get(challengedPlayerId)!.hand.length === 0) {
+    rankPlayer(draft, challengedPlayerId, events);
+  }
   closeRound(draft, wasTruthful ? challengedPlayerId : challengerId, 'CHALLENGE', events);
 }
 
-function finalizeSafeFinalPlayIfNeeded(draft: MutableGameState, actorId: string, events: DomainEvent[]): boolean {
-  const lastPlay = draft.lastPlay;
-  if (!lastPlay || lastPlay.playerId === actorId) return false;
-  const lastPlayer = draft.players.get(lastPlay.playerId)!;
-  if (lastPlayer.hand.length !== 0) return false;
-  rankPlayer(draft, lastPlayer.id, events);
-  closeRound(draft, lastPlayer.id, 'FINAL_PLAY_SAFE', events);
-  return true;
-}
-
 function closeRound(draft: MutableGameState, intendedStarter: string, reason: Extract<DomainEvent, { type: 'RoundEnded' }>['reason'], events: DomainEvent[]): void {
+  // If the last played player has 0 cards, they survive the round safely
+  if (draft.lastPlay && draft.players.get(draft.lastPlay.playerId)?.hand.length === 0) {
+    rankPlayer(draft, draft.lastPlay.playerId, events);
+  }
   if (completeGameIfOnePlayerRemains(draft, events)) return;
+
+  // Clear playing pile and discard completed round cards
+  draft.discardPile.push(...draft.playingPile);
+  draft.playingPile = [];
+
   draft.lastPlay = undefined;
   draft.lastPlayedBy = undefined;
   draft.roundLockedRank = undefined;
@@ -140,30 +145,34 @@ function closeRound(draft: MutableGameState, intendedStarter: string, reason: Ex
   events.push({ type: 'RoundEnded', reason, ...(draft.currentPlayerId === undefined ? {} : { starterId: draft.currentPlayerId }) });
 }
 
-function rankPlayer(draft: MutableGameState, playerId: string, events: DomainEvent[]): void {
-  const player = draft.players.get(playerId)!;
-  if (player.status === 'ELIMINATED') return;
+function rankPlayer(draft: MutableGameState, playerId: string, events: DomainEvent[], isLoser = false): void {
+  const player = draft.players.get(playerId);
+  if (!player || player.status === 'ELIMINATED') return;
   player.status = 'ELIMINATED';
   player.rank = draft.rankings.length + 1;
   draft.rankings.push(playerId);
-  events.push({ type: 'PlayerRanked', playerId, rank: player.rank, isLoser: false });
+  events.push({ type: 'PlayerRanked', playerId, rank: player.rank, isLoser });
 }
 
 function completeGameIfOnePlayerRemains(draft: MutableGameState, events: DomainEvent[]): boolean {
   const active = [...activePlayerIds(draft)];
-  if (active.length !== 1) return false;
-  const loserId = active[0]!;
-  const loser = draft.players.get(loserId)!;
-  loser.status = 'ELIMINATED';
-  loser.rank = draft.rankings.length + 1;
-  draft.rankings.push(loserId);
+  if (active.length > 1) return false;
+  if (active.length === 1) {
+    const loserId = active[0]!;
+    const loser = draft.players.get(loserId)!;
+    loser.status = 'ELIMINATED';
+    loser.rank = draft.rankings.length + 1;
+    draft.rankings.push(loserId);
+    events.push({ type: 'PlayerRanked', playerId: loserId, rank: loser.rank, isLoser: true });
+    events.push({ type: 'GameEnded', loserId });
+  }
   draft.phase = 'GAME_END';
   draft.currentPlayerId = undefined;
   draft.roundLockedRank = undefined;
   draft.lastPlay = undefined;
   draft.lastPlayedBy = undefined;
-  events.push({ type: 'PlayerRanked', playerId: loserId, rank: loser.rank, isLoser: true });
-  events.push({ type: 'GameEnded', loserId });
+  draft.discardPile.push(...draft.playingPile);
+  draft.playingPile = [];
   return true;
 }
 
@@ -173,7 +182,7 @@ function activePlayerIds(state: Pick<GameState, 'players'>): Set<string> {
 
 interface MutableGameState {
   roomId: string; numberOfDecks: 1 | 2; phase: GameState['phase']; seatingOrder: string[];
-  players: Map<string, MutableGamePlayer>; reservePile: Card[]; playingPile: Card[];
+  players: Map<string, MutableGamePlayer>; reservePile: Card[]; playingPile: Card[]; discardPile: Card[];
   currentPlayerId: string | undefined; roundLockedRank: Rank | undefined; lastPlay: LastPlay | undefined; lastPlayedBy: string | undefined; rankings: string[]; roundNumber: number;
 }
 
@@ -186,7 +195,9 @@ function cloneState(state: GameState): MutableGameState {
     ...state,
     seatingOrder: [...state.seatingOrder],
     players: new Map([...state.players.entries()].map(([id, player]) => [id, { ...player, hand: [...player.hand] }])),
-    reservePile: [...state.reservePile], playingPile: [...state.playingPile],
+    reservePile: [...state.reservePile],
+    playingPile: [...state.playingPile],
+    discardPile: [...state.discardPile],
     roundLockedRank: state.roundLockedRank,
     lastPlay: state.lastPlay === undefined ? undefined : { ...state.lastPlay, actualCards: [...state.lastPlay.actualCards] },
     lastPlayedBy: state.lastPlayedBy,

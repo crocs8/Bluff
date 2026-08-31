@@ -4,7 +4,7 @@ import { applyAction } from './actions.js';
 import { createGame, type GameState } from './game.js';
 import { getLegalActions } from './legal-actions.js';
 import type { RandomSource } from './random.js';
-import { getPlayerView } from './views.js';
+import { assertGameStateInvariants } from './invariants.js';
 
 const alwaysZero: RandomSource = { nextInt: () => 0 };
 const playerIds = ['A', 'B', 'C', 'D'];
@@ -21,6 +21,7 @@ function cardId(state: GameState, playerId: string, rank?: string): string {
 
 function accepted(result: ReturnType<typeof applyAction>): GameState {
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
+  assertGameStateInvariants(result.state);
   return result.state;
 }
 
@@ -79,15 +80,17 @@ describe('SKIP and natural rounds', () => {
     expect(getLegalActions(state, 'C').canCallBluff).toBe(true);
   });
 
-  it('ends A-play, B-skip, C-skip, A-skip naturally and retains the playing pile', () => {
+  it('ends A-play, B-skip, C-skip, A-skip naturally and resets the playing pile to empty for next round', () => {
     let state = game(3);
     state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [cardId(state, 'A')], claimedRank: 'A' }));
+    expect(state.playingPile).toHaveLength(1);
     state = accepted(applyAction(state, 'B', { type: 'SKIP' }));
     state = accepted(applyAction(state, 'C', { type: 'SKIP' }));
     const result = applyAction(state, 'A', { type: 'SKIP' });
     state = accepted(result);
     expect(result.ok && result.events).toContainEqual(expect.objectContaining({ type: 'RoundEnded', reason: 'NATURAL', starterId: 'A' }));
-    expect(state.playingPile).toHaveLength(1);
+    expect(state.playingPile).toHaveLength(0);
+    expect(state.discardPile).toHaveLength(1);
     expect(state.lastPlay).toBeUndefined();
     expect(state.currentPlayerId).toBe('A');
     expect(state.roundNumber).toBe(2);
@@ -103,7 +106,7 @@ describe('SKIP and natural rounds', () => {
     expect(state.roundLockedRank).toBe('Q');
   });
 
-  it('uses the newest play for the natural-round boundary', () => {
+  it('uses the newest play for the natural-round boundary and discards completed round pile', () => {
     let state = game(3);
     state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [cardId(state, 'A')], claimedRank: 'A' }));
     state = accepted(applyAction(state, 'B', { type: 'SKIP' }));
@@ -113,7 +116,8 @@ describe('SKIP and natural rounds', () => {
     state = accepted(applyAction(state, 'C', { type: 'SKIP' }));
     expect(state.lastPlay).toBeUndefined();
     expect(state.currentPlayerId).toBe('C');
-    expect(state.playingPile).toHaveLength(2);
+    expect(state.playingPile).toHaveLength(0);
+    expect(state.discardPile).toHaveLength(2);
   });
 });
 
@@ -154,5 +158,60 @@ describe('CALL BLUFF', () => {
 
     const ownTurn = { ...state, currentPlayerId: 'B' };
     expect(applyAction(ownTurn, 'B', { type: 'CALL_BLUFF' })).toMatchObject({ ok: false, error: { code: 'SELF_CHALLENGE_FORBIDDEN' } });
+  });
+});
+
+describe('Zero-Card Players and Consecutive Skips', () => {
+  it('does not end round immediately when player plays last card and next player skips', () => {
+    let state = game(3);
+    // Give A only 1 card for test
+    const aCard = state.players.get('A')!.hand[0]!;
+    const discardedA = state.players.get('A')!.hand.slice(1);
+    const playersMap = new Map(state.players);
+    playersMap.set('A', { ...state.players.get('A')!, hand: [aCard] });
+    state = { ...state, players: playersMap, discardPile: [...discardedA] };
+    assertGameStateInvariants(state);
+
+    // A plays their last card truthfully
+    state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [aCard.id], claimedRank: aCard.rank }));
+    expect(state.players.get('A')!.hand).toHaveLength(0);
+    expect(state.currentPlayerId).toBe('B');
+
+    // B skips — turn MUST go to C, NOT terminate round prematurely
+    state = accepted(applyAction(state, 'B', { type: 'SKIP' }));
+    expect(state.currentPlayerId).toBe('C');
+    expect(state.phase).toBe('PLAYING');
+
+    // C challenges A
+    const result = applyAction(state, 'C', { type: 'CALL_BLUFF' });
+    state = accepted(result);
+    // Since A was truthful, A is now ranked 1st, C takes pile
+    expect(state.players.get('A')!.status).toBe('ELIMINATED');
+    expect(state.rankings).toContain('A');
+    expect(state.players.get('A')!.rank).toBe(1);
+  });
+
+  it('allows zero-card player to win naturally when everyone skips', () => {
+    let state = game(3);
+    const aCard = state.players.get('A')!.hand[0]!;
+    const discardedA = state.players.get('A')!.hand.slice(1);
+    const playersMap = new Map(state.players);
+    playersMap.set('A', { ...state.players.get('A')!, hand: [aCard] });
+    state = { ...state, players: playersMap, discardPile: [...discardedA] };
+
+    // A plays last card
+    state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [aCard.id], claimedRank: aCard.rank }));
+    // B skips
+    state = accepted(applyAction(state, 'B', { type: 'SKIP' }));
+    expect(state.currentPlayerId).toBe('C');
+    // C skips
+    state = accepted(applyAction(state, 'C', { type: 'SKIP' }));
+    expect(state.currentPlayerId).toBe('A');
+    // A skips -> round ends naturally
+    state = accepted(applyAction(state, 'A', { type: 'SKIP' }));
+    // A survived unchallenged with 0 cards -> A is ranked 1st
+    expect(state.players.get('A')!.status).toBe('ELIMINATED');
+    expect(state.rankings).toContain('A');
+    expect(state.rankings[0]).toBe('A');
   });
 });

@@ -54,25 +54,31 @@ describe('ActionDock Component', () => {
     vi.clearAllMocks();
   });
 
+  const baseMock = {
+    connection: 'CONNECTED' as const,
+    room: mockRoom,
+    game: mockGame,
+    challenge: undefined,
+    lastEvent: undefined,
+    error: undefined,
+    removedNotice: undefined,
+    submitting: false,
+    create: vi.fn(),
+    join: vi.fn(),
+    configure: vi.fn(),
+    start: vi.fn(),
+    play: mockPlay,
+    skip: mockSkip,
+    callBluff: mockCallBluff,
+    removePlayer: vi.fn(),
+    resetSession: vi.fn(),
+    clearChallenge: vi.fn(),
+    clearError: vi.fn(),
+    clearRemovedNotice: vi.fn(),
+  };
+
   it('renders cards in hand, rank strip, and action buttons', () => {
-    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
-      connection: 'CONNECTED',
-      room: mockRoom,
-      game: mockGame,
-      challenge: undefined,
-      lastEvent: undefined,
-      error: undefined,
-      submitting: false,
-      create: vi.fn(),
-      join: vi.fn(),
-      configure: vi.fn(),
-      start: vi.fn(),
-      play: mockPlay,
-      skip: mockSkip,
-      callBluff: mockCallBluff,
-      clearChallenge: vi.fn(),
-      clearError: vi.fn(),
-    });
+    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue(baseMock);
 
     render(<ActionDock />);
     expect(screen.getByText(/Select 1 - 4 cards/i)).toBeInTheDocument();
@@ -83,35 +89,15 @@ describe('ActionDock Component', () => {
   });
 
   it('allows selecting card and claimed rank directly from rank strip to play', () => {
-    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
-      connection: 'CONNECTED',
-      room: mockRoom,
-      game: mockGame,
-      challenge: undefined,
-      lastEvent: undefined,
-      error: undefined,
-      submitting: false,
-      create: vi.fn(),
-      join: vi.fn(),
-      configure: vi.fn(),
-      start: vi.fn(),
-      play: mockPlay,
-      skip: mockSkip,
-      callBluff: mockCallBluff,
-      clearChallenge: vi.fn(),
-      clearError: vi.fn(),
-    });
+    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue(baseMock);
 
     render(<ActionDock />);
     const cardButtons = screen.getAllByRole('button', { name: /K of/i });
-    // Select first card
     fireEvent.click(cardButtons[0]!);
 
-    // Select claimed rank "3" from the rank strip
     const rank3Btn = screen.getByRole('button', { name: '3' });
     fireEvent.click(rank3Btn);
 
-    // Click PLAY button
     const playBtn = screen.getByRole('button', { name: /PLAY/i });
     fireEvent.click(playBtn);
 
@@ -131,22 +117,8 @@ describe('ActionDock Component', () => {
     };
 
     vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
-      connection: 'CONNECTED',
-      room: mockRoom,
+      ...baseMock,
       game: gameWithSkip,
-      challenge: undefined,
-      lastEvent: undefined,
-      error: undefined,
-      submitting: false,
-      create: vi.fn(),
-      join: vi.fn(),
-      configure: vi.fn(),
-      start: vi.fn(),
-      play: mockPlay,
-      skip: mockSkip,
-      callBluff: mockCallBluff,
-      clearChallenge: vi.fn(),
-      clearError: vi.fn(),
     });
 
     render(<ActionDock />);
@@ -169,22 +141,8 @@ describe('ActionDock Component', () => {
     };
 
     vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
-      connection: 'CONNECTED',
-      room: mockRoom,
+      ...baseMock,
       game: gameWithBluff,
-      challenge: undefined,
-      lastEvent: undefined,
-      error: undefined,
-      submitting: false,
-      create: vi.fn(),
-      join: vi.fn(),
-      configure: vi.fn(),
-      start: vi.fn(),
-      play: mockPlay,
-      skip: mockSkip,
-      callBluff: mockCallBluff,
-      clearChallenge: vi.fn(),
-      clearError: vi.fn(),
     });
 
     render(<ActionDock />);

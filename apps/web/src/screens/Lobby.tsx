@@ -3,7 +3,7 @@ import { useBluffSocket } from '../socket-provider.js';
 import { ConnectionBadge } from '../components/shared.js';
 
 export function Lobby() {
-  const { room, configure, start, error, connection } = useBluffSocket();
+  const { room, configure, start, removePlayer, error, connection } = useBluffSocket();
   const [copied, setCopied] = useState(false);
 
   if (!room) return null;
@@ -89,10 +89,24 @@ export function Lobby() {
                     </div>
                   </div>
 
-                  {/* Ready / Status Pill */}
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-emerald-950/80 text-emerald-300 border border-emerald-700/60">
-                    READY
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {/* Host Remove Player Button */}
+                    {isHost && !isMe && (
+                      <button
+                        type="button"
+                        onClick={() => removePlayer(player.id)}
+                        className="px-2.5 py-1 rounded-lg bg-red-950/80 border border-red-700/60 text-red-300 font-bold text-[10px] hover:bg-red-900/80 active:scale-95 transition-all uppercase tracking-wider"
+                        title="Remove player"
+                      >
+                        REMOVE
+                      </button>
+                    )}
+
+                    {/* Ready / Status Pill */}
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-emerald-950/80 text-emerald-300 border border-emerald-700/60">
+                      READY
+                    </span>
+                  </div>
                 </div>
               );
             })}

@@ -34,6 +34,7 @@ export interface ChallengeResult {
   readonly claimedRank: Rank;
   readonly revealedCards: Card[];
   readonly wasTruthful: boolean;
+  readonly pileRecipientId: string;
   readonly revision: number;
 }
 
@@ -41,6 +42,7 @@ export interface ClientToServerEvents {
   'room:create': (payload: { username: string }, ack: Ack) => void;
   'room:join': (payload: { roomId: string; username: string }, ack: Ack) => void;
   'room:leave': (payload: Record<string, never>, ack: Ack) => void;
+  'room:remove-player': (payload: { playerId: string }, ack: Ack) => void;
   'room:configure': (payload: { numberOfDecks: DeckCount }, ack: Ack) => void;
   'room:start': (payload: Record<string, never>, ack: Ack) => void;
   'game:play': (payload: { cardIds: string[]; claimedRank: Rank }, ack: Ack) => void;
@@ -51,6 +53,7 @@ export interface ClientToServerEvents {
 
 export interface ServerToClientEvents {
   'room:view': (view: RoomView) => void;
+  'room:removed': (payload: { reason: 'PLAYER_REMOVED_BY_HOST' | string }) => void;
   'game:view': (view: GameViewEnvelope) => void;
   'game:event': (event: PublicGameEvent & { readonly revision: number }) => void;
   'game:challenge-result': (result: ChallengeResult) => void;

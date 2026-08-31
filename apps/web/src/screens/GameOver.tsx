@@ -8,7 +8,7 @@ function getOrdinal(n: number): string {
 }
 
 export function GameOver() {
-  const { game, room } = useBluffSocket();
+  const { game, room, resetSession } = useBluffSocket();
   if (!game || !room) return null;
 
   const { players, rankings } = game.game;
@@ -89,14 +89,21 @@ export function GameOver() {
         )}
       </section>
 
-      {/* ── Play Again Action ─────────────────────── */}
-      <div className="pb-2">
+      {/* ── Actions Matching Reference (PLAY AGAIN & LEAVE) ─────────────── */}
+      <div className="pb-2 space-y-2">
         <button
           type="button"
-          onClick={() => window.location.reload()}
+          onClick={resetSession}
           className="w-full btn-play rounded-2xl py-4 font-black text-sm tracking-wider uppercase"
         >
           PLAY AGAIN
+        </button>
+        <button
+          type="button"
+          onClick={resetSession}
+          className="w-full btn-gold rounded-2xl py-3 font-bold text-xs tracking-wider uppercase"
+        >
+          LEAVE
         </button>
       </div>
     </main>

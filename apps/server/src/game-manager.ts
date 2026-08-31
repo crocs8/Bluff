@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
-import { applyAction, createGame, getPlayerView, type DomainEvent, type GameAction, type GameState, type RandomSource } from '@bluff/game-engine';
+import { applyAction, createGame, getPlayerView, nextActivePlayerId, type DomainEvent, type GameAction, type GameState, type RandomSource } from '@bluff/game-engine';
 import type { DeckCount } from '@bluff/shared';
 
 import type { GameViewEnvelope, RoomView } from './contracts.js';
@@ -16,6 +16,7 @@ export interface RoomSession {
   hostPlayerId: string;
   numberOfDecks: DeckCount;
   readonly players: Map<string, SessionPlayer>;
+  readonly removedPlayerIds: Set<string>;
   game: GameState | undefined;
   revision: number;
   turnDeadlineAt: number | undefined;
@@ -42,6 +43,8 @@ export class GameManager {
   private readonly schedule: typeof setTimeout;
   private readonly cancel: typeof clearTimeout;
   private readonly turnDurationMs: number;
+  private readonly onTimeout: GameManagerOptions['onTimeout'];
+
   constructor(private readonly random?: RandomSource, options: GameManagerOptions = {}) {
     this.now = options.now ?? Date.now;
     this.schedule = options.setTimeout ?? setTimeout;
@@ -49,11 +52,21 @@ export class GameManager {
     this.turnDurationMs = options.turnDurationMs ?? 45_000;
     this.onTimeout = options.onTimeout;
   }
-  private readonly onTimeout: GameManagerOptions['onTimeout'];
 
   createRoom(username: string, socketId: string): { room: RoomSession; player: SessionPlayer } {
     const player = this.createPlayer(username, socketId);
-    const room: RoomSession = { roomId: this.createRoomId(), hostPlayerId: player.id, numberOfDecks: 1, players: new Map([[player.id, player]]), game: undefined, revision: 0, turnDeadlineAt: undefined, turnTimer: undefined, turnToken: 0 };
+    const room: RoomSession = {
+      roomId: this.createRoomId(),
+      hostPlayerId: player.id,
+      numberOfDecks: 1,
+      players: new Map([[player.id, player]]),
+      removedPlayerIds: new Set<string>(),
+      game: undefined,
+      revision: 0,
+      turnDeadlineAt: undefined,
+      turnTimer: undefined,
+      turnToken: 0,
+    };
     this.rooms.set(room.roomId, room);
     this.playerRoomIds.set(player.id, room.roomId);
     return { room, player };
@@ -80,6 +93,100 @@ export class GameManager {
     if (room.hostPlayerId === playerId && room.players.size > 0) room.hostPlayerId = room.players.keys().next().value!;
     if (room.players.size === 0) this.rooms.delete(room.roomId);
     return room;
+  }
+
+  removePlayer(requesterPlayerId: string, targetPlayerId: string): { room: RoomSession; removedPlayer: SessionPlayer; events: DomainEvent[] } {
+    const room = this.requirePlayerRoom(requesterPlayerId);
+    if (room.hostPlayerId !== requesterPlayerId) {
+      throw new ManagerError('NOT_HOST', 'Only the host can remove players.');
+    }
+    if (requesterPlayerId === targetPlayerId) {
+      throw new ManagerError('INVALID_ACTION', 'The host cannot remove themselves.');
+    }
+    const target = room.players.get(targetPlayerId);
+    if (!target) {
+      throw new ManagerError('PLAYER_NOT_FOUND', 'Target player was not found in this room.');
+    }
+
+    room.removedPlayerIds.add(targetPlayerId);
+    room.players.delete(targetPlayerId);
+    this.playerRoomIds.delete(targetPlayerId);
+
+    const events: DomainEvent[] = [];
+
+    if (room.game) {
+      this.expireTurnIfNeeded(room);
+      if (room.game.phase === 'PLAYING') {
+        const isCurrentPlayer = room.game.currentPlayerId === targetPlayerId;
+        const targetGamePlayer = room.game.players.get(targetPlayerId);
+
+        const nextPlayers = new Map(room.game.players);
+        const nextDiscardPile = [...room.game.discardPile];
+
+        if (targetGamePlayer) {
+          if (targetGamePlayer.hand.length > 0) {
+            nextDiscardPile.push(...targetGamePlayer.hand);
+          }
+          nextPlayers.set(targetPlayerId, {
+            ...targetGamePlayer,
+            hand: [],
+            status: 'ELIMINATED',
+          });
+        }
+
+        const activeIds = new Set(
+          [...nextPlayers.values()]
+            .filter((p) => p.status !== 'ELIMINATED' && p.id !== targetPlayerId)
+            .map((p) => p.id),
+        );
+
+        let nextCurrentPlayerId = room.game.currentPlayerId;
+        let nextPhase: GameState['phase'] = room.game.phase;
+        let nextLastPlay = room.game.lastPlay;
+        let nextLastPlayedBy = room.game.lastPlayedBy;
+        let nextRoundLockedRank = room.game.roundLockedRank;
+        const nextRankings = [...room.game.rankings];
+
+        if (activeIds.size <= 1) {
+          nextPhase = 'GAME_END';
+          nextCurrentPlayerId = undefined;
+          nextRoundLockedRank = undefined;
+          nextLastPlay = undefined;
+          nextLastPlayedBy = undefined;
+          if (activeIds.size === 1) {
+            const loserId = [...activeIds][0]!;
+            const remainingPlayer = nextPlayers.get(loserId)!;
+            nextPlayers.set(loserId, { ...remainingPlayer, status: 'ELIMINATED', rank: nextRankings.length + 1 });
+            nextRankings.push(loserId);
+            events.push({ type: 'PlayerRanked', playerId: loserId, rank: nextRankings.length, isLoser: true });
+            events.push({ type: 'GameEnded', loserId });
+          }
+          this.cancelTurn(room);
+        } else if (isCurrentPlayer) {
+          this.cancelTurn(room);
+          nextCurrentPlayerId = nextActivePlayerId(room.game.seatingOrder, activeIds, targetPlayerId);
+        }
+
+        room.game = {
+          ...room.game,
+          phase: nextPhase,
+          players: nextPlayers,
+          discardPile: nextDiscardPile,
+          currentPlayerId: nextCurrentPlayerId,
+          lastPlay: nextLastPlay,
+          lastPlayedBy: nextLastPlayedBy,
+          roundLockedRank: nextRoundLockedRank,
+          rankings: nextRankings,
+        };
+
+        if (isCurrentPlayer && room.game.phase === 'PLAYING') {
+          this.scheduleTurn(room);
+        }
+      }
+    }
+
+    room.revision += 1;
+    return { room, removedPlayer: target, events };
   }
 
   configureRoom(playerId: string, numberOfDecks: DeckCount): RoomSession {
@@ -116,7 +223,24 @@ export class GameManager {
   }
 
   resume(playerId: string, socketId: string): RoomSession {
-    const room = this.requirePlayerRoom(playerId);
+    const roomId = this.playerRoomIds.get(playerId);
+    if (!roomId) {
+      // Check if player was removed
+      for (const r of this.rooms.values()) {
+        if (r.removedPlayerIds.has(playerId)) {
+          throw new ManagerError('PLAYER_REMOVED', 'You have been removed by the host.');
+        }
+      }
+      throw new ManagerError('INVALID_SESSION', 'Player has no active room session.');
+    }
+    const room = this.rooms.get(roomId);
+    if (!room) throw new ManagerError('INVALID_SESSION', 'Room does not exist.');
+    if (room.removedPlayerIds.has(playerId)) {
+      throw new ManagerError('PLAYER_REMOVED', 'You have been removed by the host.');
+    }
+    if (room.game && room.game.phase === 'GAME_END') {
+      throw new ManagerError('GAME_ENDED', 'This game has ended.');
+    }
     this.expireTurnIfNeeded(room);
     const player = room.players.get(playerId);
     if (!player) throw new ManagerError('INVALID_SESSION', 'Session is not valid for this room.');
@@ -137,8 +261,19 @@ export class GameManager {
   }
 
   getRoomView(room: RoomSession, viewerId: string): RoomView {
-    return { roomId: room.roomId, hostPlayerId: room.hostPlayerId, numberOfDecks: room.numberOfDecks, gameStarted: room.game !== undefined, revision: room.revision, selfPlayerId: viewerId,
-      players: [...room.players.values()].map((player) => ({ id: player.id, username: player.username, connectionStatus: player.socketId ? 'CONNECTED' : 'DISCONNECTED' })) };
+    return {
+      roomId: room.roomId,
+      hostPlayerId: room.hostPlayerId,
+      numberOfDecks: room.numberOfDecks,
+      gameStarted: room.game !== undefined,
+      revision: room.revision,
+      selfPlayerId: viewerId,
+      players: [...room.players.values()].map((player) => ({
+        id: player.id,
+        username: player.username,
+        connectionStatus: player.socketId ? 'CONNECTED' : 'DISCONNECTED',
+      })),
+    };
   }
 
   getGameView(room: RoomSession, viewerId: string): GameViewEnvelope | undefined {

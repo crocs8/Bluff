@@ -80,7 +80,7 @@ describe('real-time room and game synchronization', () => {
     expect((await configB).numberOfDecks).toBe(2);
   });
 
-  it('starts a game, sends individualized views, synchronizes play, and reveals only challenged cards', async () => {
+  it('starts a game, sends individualized views, synchronizes play, and reveals only challenged cards with pileRecipientId', async () => {
     const a = await connect();
     const b = await connect();
     const room = await createRoom(a, 'Ada');
@@ -100,11 +100,12 @@ describe('real-time room and game synchronization', () => {
     const bPlayView = await bAfterPlay;
     expect(JSON.stringify(bPlayView)).not.toContain(selected.id);
 
-    const reveal = once<{ revealedCards: Array<{ id: string }>; wasTruthful: boolean }>(a, 'game:challenge-result');
+    const reveal = once<{ revealedCards: Array<{ id: string }>; wasTruthful: boolean; pileRecipientId: string }>(a, 'game:challenge-result');
     const aAfterChallenge = once<{ revision: number }>(a, 'game:view');
     const bAfterChallenge = once<{ revision: number }>(b, 'game:view');
     expect(await emitAck(b, 'game:call-bluff', {})).toMatchObject({ ok: true, revision: 4 });
-    expect((await reveal)).toMatchObject({ wasTruthful: false, revealedCards: [expect.objectContaining({ id: selected.id })] });
+    const revealPayload = await reveal;
+    expect(revealPayload).toMatchObject({ wasTruthful: false, pileRecipientId: room.playerId, revealedCards: [expect.objectContaining({ id: selected.id })] });
     expect((await aAfterChallenge).revision).toBe(4);
     expect((await bAfterChallenge).revision).toBe(4);
   });
@@ -127,6 +128,31 @@ describe('real-time room and game synchronization', () => {
     expect(await emitAck(a, 'game:skip', {})).toMatchObject({ ok: true, revision: 5 });
     const event = await roundEnded;
     expect(event.revision).toBe(5);
+  });
+
+  it('allows host to remove player and broadcasts room:removed to target', async () => {
+    const a = await connect();
+    const b = await connect();
+    const c = await connect();
+    const room = await createRoom(a, 'Ada');
+    const joinedB = await emitAck(b, 'room:join', { roomId: room.roomId!, username: 'Ben' });
+    await emitAck(c, 'room:join', { roomId: room.roomId!, username: 'Charlie' });
+
+    const removedEvent = once<{ reason: string }>(b, 'room:removed');
+    const aRoomView = onceMatching<{ players: unknown[] }>(a, 'room:view', (v) => v.players.length === 2);
+
+    // Host removes Ben
+    const removeAck = await emitAck(a, 'room:remove-player', { playerId: joinedB.playerId! });
+    expect(removeAck.ok).toBe(true);
+
+    const removed = await removedEvent;
+    expect(removed.reason).toBe('PLAYER_REMOVED_BY_HOST');
+    expect((await aRoomView).players).toHaveLength(2);
+
+    // Non-host cannot remove
+    const failAck = await emitAck(c, 'room:remove-player', { playerId: room.playerId! });
+    expect(failAck.ok).toBe(false);
+    expect(failAck.code).toBe('NOT_HOST');
   });
 
   it('rejects illegal duplicate actions without advancing revision and restores an active session on resume', async () => {

@@ -40,7 +40,7 @@ function formatClaimText(count: number, rank: Rank): string {
 }
 
 export function GameTable() {
-  const { game, room, lastEvent } = useBluffSocket();
+  const { game, room, lastEvent, removePlayer, resetSession } = useBluffSocket();
   const [showMenu, setShowMenu] = useState(false);
   const [roundToast, setRoundToast] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -56,7 +56,9 @@ export function GameTable() {
       return;
     }
     if (currentPlayerId !== previousCurrentPlayerId.current && currentPlayerId === selfPlayerId && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-      navigator.vibrate(200);
+      try {
+        navigator.vibrate(200);
+      } catch {}
     }
     previousCurrentPlayerId.current = currentPlayerId;
   }, [currentPlayerId, selfPlayerId]);
@@ -91,6 +93,7 @@ export function GameTable() {
   const state = game.game;
   const me = state.players.find((p) => p.id === room.selfPlayerId);
   const opponents = state.players.filter((p) => p.id !== room.selfPlayerId);
+  const isHost = room.hostPlayerId === room.selfPlayerId;
 
   const isMyTurn = state.currentPlayerId === room.selfPlayerId;
   const currentPlayer = state.players.find((p) => p.id === state.currentPlayerId);
@@ -242,41 +245,85 @@ export function GameTable() {
       {/* ── Challenge Overlay ──────────────────────── */}
       <ChallengeOverlay />
 
-      {/* ── Menu / Drawer Dialog ───────────────────── */}
+      {/* ── Menu / Drawer Dialog Matching Panel 10 ── */}
       {showMenu && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop">
-          <div className="modal-dialog w-full max-w-sm rounded-3xl p-6 select-none relative">
-            <div className="flex items-center justify-between pb-4 border-b border-[#a87e2b]/30 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="size-10 rounded-full bg-[#c6952e] grid place-items-center font-bold text-black text-base">
-                  {me?.username[0]?.toUpperCase() ?? 'Y'}
-                </div>
+          <div className="modal-dialog w-full max-w-sm rounded-3xl p-5 select-none relative max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-[#a87e2b]/30 mb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <span className="text-lg">👑</span>
                 <div>
-                  <h3 className="font-bold text-sm text-zinc-100">{me?.username ?? 'You'}</h3>
-                  <p className="text-[11px] text-zinc-400">Room: {room.roomId}</p>
+                  <h3 className="font-bold text-sm text-zinc-100">PLAYERS & MENU</h3>
+                  <p className="text-[10px] text-zinc-400">Room: {room.roomId}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowMenu(false)}
-                className="size-8 rounded-full bg-zinc-800/80 text-zinc-400 hover:text-white grid place-items-center text-sm"
+                className="size-7 rounded-full bg-zinc-800/80 text-zinc-400 hover:text-white grid place-items-center text-xs"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-2 text-sm">
-              <div className="p-3 rounded-xl bg-black/40 border border-zinc-800 flex items-center justify-between">
+            {/* Players List with Host Remove Controls */}
+            <div className="flex-1 overflow-y-auto space-y-2 mb-3 pr-1">
+              <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
+                Current Players ({state.players.length})
+              </p>
+              {state.players.map((p) => {
+                const isTargetMe = p.id === room.selfPlayerId;
+                const isTargetHost = p.id === room.hostPlayerId;
+
+                return (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-black/50 border border-zinc-800 text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="size-7 rounded-full bg-[#1b4332] border border-[#d4a742]/50 grid place-items-center text-white font-bold text-[10px]">
+                        {p.username[0]?.toUpperCase()}
+                      </div>
+                      <div>
+                        <span className="font-semibold text-zinc-200 block">
+                          {p.username} {isTargetMe ? '(You)' : ''}
+                        </span>
+                        <span className="text-[10px] text-zinc-400">
+                          {p.status === 'ELIMINATED' ? (p.rank ? `#${p.rank}` : 'Eliminated') : `${p.cardCount} Cards`}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {isTargetHost && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-700/60 text-[9px] gold-text font-bold">
+                          HOST
+                        </span>
+                      )}
+
+                      {isHost && !isTargetMe && p.status !== 'ELIMINATED' && (
+                        <button
+                          type="button"
+                          onClick={() => removePlayer(p.id)}
+                          className="px-2 py-1 rounded bg-red-950/90 border border-red-700/70 text-red-300 text-[10px] font-bold hover:bg-red-900 active:scale-95 transition-all"
+                        >
+                          REMOVE
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="space-y-2 text-xs shrink-0">
+              <div className="p-2.5 rounded-xl bg-black/40 border border-zinc-800 flex items-center justify-between">
                 <span className="text-zinc-300">⚙ Settings</span>
-                <span className="text-zinc-500 text-xs">Default</span>
+                <span className="text-zinc-500 text-[10px]">Default</span>
               </div>
-              <div className="p-3 rounded-xl bg-black/40 border border-zinc-800 flex items-center justify-between">
+              <div className="p-2.5 rounded-xl bg-black/40 border border-zinc-800 flex items-center justify-between">
                 <span className="text-zinc-300">📖 How to Play</span>
-                <span className="text-zinc-500 text-xs">Bluff Rules</span>
-              </div>
-              <div className="p-3 rounded-xl bg-black/40 border border-zinc-800 flex items-center justify-between">
-                <span className="text-zinc-300">💬 Sound Effects</span>
-                <span className="text-emerald-400 text-xs">ON</span>
+                <span className="text-zinc-500 text-[10px]">Bluff Rules</span>
               </div>
             </div>
 
@@ -284,9 +331,9 @@ export function GameTable() {
               type="button"
               onClick={() => {
                 setShowMenu(false);
-                window.location.reload();
+                resetSession();
               }}
-              className="mt-6 w-full rounded-xl bg-red-900/60 border border-red-700/60 p-3 text-red-300 font-bold text-sm active:scale-95"
+              className="mt-3 w-full rounded-xl bg-red-900/60 border border-red-700/60 p-2.5 text-red-300 font-bold text-xs active:scale-95 shrink-0 uppercase tracking-wider"
             >
               Exit Game
             </button>

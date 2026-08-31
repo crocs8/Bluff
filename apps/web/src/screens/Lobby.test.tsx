@@ -11,6 +11,7 @@ vi.mock('../socket-provider.js', () => ({
 describe('Lobby Screen', () => {
   const mockConfigure = vi.fn();
   const mockStart = vi.fn();
+  const mockRemovePlayer = vi.fn();
 
   const mockRoom: RoomView = {
     roomId: 'ROOM42',
@@ -37,6 +38,7 @@ describe('Lobby Screen', () => {
       challenge: undefined,
       lastEvent: undefined,
       error: undefined,
+      removedNotice: undefined,
       submitting: false,
       create: vi.fn(),
       join: vi.fn(),
@@ -45,8 +47,11 @@ describe('Lobby Screen', () => {
       play: vi.fn(),
       skip: vi.fn(),
       callBluff: vi.fn(),
+      removePlayer: mockRemovePlayer,
+      resetSession: vi.fn(),
       clearChallenge: vi.fn(),
       clearError: vi.fn(),
+      clearRemovedNotice: vi.fn(),
     });
 
     render(<Lobby />);
@@ -54,9 +59,11 @@ describe('Lobby Screen', () => {
     expect(screen.getAllByText(/Alice/i).length).toBeGreaterThan(0);
     expect(screen.getByText('Bob')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /START GAME/i })).toBeInTheDocument();
+    // Host sees REMOVE button for Bob
+    expect(screen.getByRole('button', { name: /REMOVE/i })).toBeInTheDocument();
   });
 
-  it('allows host to change deck configuration with CHANGE button', () => {
+  it('allows host to change deck configuration with CHANGE button and remove player', () => {
     vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
       connection: 'CONNECTED',
       room: mockRoom,
@@ -64,6 +71,7 @@ describe('Lobby Screen', () => {
       challenge: undefined,
       lastEvent: undefined,
       error: undefined,
+      removedNotice: undefined,
       submitting: false,
       create: vi.fn(),
       join: vi.fn(),
@@ -72,17 +80,24 @@ describe('Lobby Screen', () => {
       play: vi.fn(),
       skip: vi.fn(),
       callBluff: vi.fn(),
+      removePlayer: mockRemovePlayer,
+      resetSession: vi.fn(),
       clearChallenge: vi.fn(),
       clearError: vi.fn(),
+      clearRemovedNotice: vi.fn(),
     });
 
     render(<Lobby />);
     const changeBtn = screen.getByRole('button', { name: /CHANGE/i });
     fireEvent.click(changeBtn);
     expect(mockConfigure).toHaveBeenCalledWith(2);
+
+    const removeBtn = screen.getByRole('button', { name: /REMOVE/i });
+    fireEvent.click(removeBtn);
+    expect(mockRemovePlayer).toHaveBeenCalledWith('p2');
   });
 
-  it('disables deck configuration and start button for non-host players', () => {
+  it('disables deck configuration and start/remove button for non-host players', () => {
     const nonHostRoom: RoomView = {
       ...mockRoom,
       selfPlayerId: 'p2',
@@ -95,6 +110,7 @@ describe('Lobby Screen', () => {
       challenge: undefined,
       lastEvent: undefined,
       error: undefined,
+      removedNotice: undefined,
       submitting: false,
       create: vi.fn(),
       join: vi.fn(),
@@ -103,12 +119,16 @@ describe('Lobby Screen', () => {
       play: vi.fn(),
       skip: vi.fn(),
       callBluff: vi.fn(),
+      removePlayer: mockRemovePlayer,
+      resetSession: vi.fn(),
       clearChallenge: vi.fn(),
       clearError: vi.fn(),
+      clearRemovedNotice: vi.fn(),
     });
 
     render(<Lobby />);
     expect(screen.queryByRole('button', { name: /START GAME/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /REMOVE/i })).not.toBeInTheDocument();
     expect(screen.getByText(/Waiting for host to start the game/i)).toBeInTheDocument();
   });
 });

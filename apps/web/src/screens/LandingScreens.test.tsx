@@ -41,6 +41,7 @@ describe('CreateRoom Screen', () => {
       challenge: undefined,
       lastEvent: undefined,
       error: undefined,
+      removedNotice: undefined,
       submitting: false,
       create: mockCreate,
       join: vi.fn(),
@@ -49,8 +50,11 @@ describe('CreateRoom Screen', () => {
       play: vi.fn(),
       skip: vi.fn(),
       callBluff: vi.fn(),
+      removePlayer: vi.fn(),
+      resetSession: vi.fn(),
       clearChallenge: vi.fn(),
       clearError: vi.fn(),
+      clearRemovedNotice: vi.fn(),
     });
   });
 
@@ -92,6 +96,7 @@ describe('JoinRoom Screen', () => {
       challenge: undefined,
       lastEvent: undefined,
       error: undefined,
+      removedNotice: undefined,
       submitting: false,
       create: vi.fn(),
       join: mockJoin,
@@ -100,8 +105,11 @@ describe('JoinRoom Screen', () => {
       play: vi.fn(),
       skip: vi.fn(),
       callBluff: vi.fn(),
+      removePlayer: vi.fn(),
+      resetSession: vi.fn(),
       clearChallenge: vi.fn(),
       clearError: vi.fn(),
+      clearRemovedNotice: vi.fn(),
     });
   });
 

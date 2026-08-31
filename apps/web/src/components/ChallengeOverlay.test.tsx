@@ -63,10 +63,11 @@ describe('ChallengeOverlay Component', () => {
       { id: 'c2', rank: 'Q', suit: 'spades', deckIndex: 0 },
     ],
     wasTruthful: false,
+    pileRecipientId: 'p2',
     revision: 5,
   };
 
-  it('renders animation stages and reveals BLUFF result with cards', () => {
+  it('renders animation stages and reveals BLUFF CAUGHT result with cards and correct recipient', () => {
     vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
       connection: 'CONNECTED',
       room: mockRoom,
@@ -74,6 +75,7 @@ describe('ChallengeOverlay Component', () => {
       challenge: mockBluffChallenge,
       lastEvent: undefined,
       error: undefined,
+      removedNotice: undefined,
       submitting: false,
       create: vi.fn(),
       join: vi.fn(),
@@ -82,8 +84,11 @@ describe('ChallengeOverlay Component', () => {
       play: vi.fn(),
       skip: vi.fn(),
       callBluff: vi.fn(),
+      removePlayer: vi.fn(),
+      resetSession: vi.fn(),
       clearChallenge: vi.fn(),
       clearError: vi.fn(),
+      clearRemovedNotice: vi.fn(),
     });
 
     render(<ChallengeOverlay />);
@@ -101,8 +106,8 @@ describe('ChallengeOverlay Component', () => {
     act(() => {
       vi.advanceTimersByTime(1300);
     });
-    expect(screen.getByText('BLUFF!')).toBeInTheDocument();
-    expect(screen.getByText(/wins the pile/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /CONTINUE/i })).toBeInTheDocument();
+    expect(screen.getByText('BLUFF CAUGHT!')).toBeInTheDocument();
+    expect(screen.getByText(/takes the pile/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /CLOSE/i })).toBeInTheDocument();
   });
 });

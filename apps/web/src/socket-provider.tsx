@@ -25,6 +25,7 @@ export interface SocketState {
   challenge: ChallengeResult | undefined;
   lastEvent: PublicGameEvent | undefined;
   error: string | undefined;
+  removedNotice: string | undefined;
   submitting: boolean;
   // Actions
   create(username: string): void;
@@ -34,8 +35,11 @@ export interface SocketState {
   play(cardIds: string[], claimedRank: Rank): void;
   skip(): void;
   callBluff(): void;
+  removePlayer(playerId: string): void;
+  resetSession(): void;
   clearChallenge(): void;
   clearError(): void;
+  clearRemovedNotice(): void;
 }
 
 const Context = createContext<SocketState | undefined>(undefined);
@@ -49,6 +53,7 @@ export function SocketProvider({ children }: PropsWithChildren) {
   const [challenge, setChallenge] = useState<ChallengeResult | undefined>(undefined);
   const [lastEvent, setLastEvent] = useState<PublicGameEvent | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [removedNotice, setRemovedNotice] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
 
   // Keep track of whether the socket has had its first successful connect
@@ -73,8 +78,16 @@ export function SocketProvider({ children }: PropsWithChildren) {
         // Reconnect — resume existing session
         setConnection('RECONNECTING');
         socket.emit('session:resume', { playerId }, (ack: { ok: boolean; message?: string }) => {
-          setConnection(ack.ok ? 'RECONNECTED' : 'CONNECTED');
-          setTimeout(() => setConnection('CONNECTED'), 2500);
+          if (ack.ok) {
+            setConnection('RECONNECTED');
+            setTimeout(() => setConnection('CONNECTED'), 2500);
+          } else {
+            // If resume failed (e.g. removed or game ended), clear stale session
+            localStorage.removeItem(SESSION_KEY);
+            setRoom(undefined);
+            setGame(undefined);
+            setConnection('CONNECTED');
+          }
         });
       } else {
         setConnection('CONNECTED');
@@ -86,9 +99,18 @@ export function SocketProvider({ children }: PropsWithChildren) {
       setConnection('CONNECTION_LOST');
     }
 
+    function handleRemoved(payload: { reason: string }) {
+      localStorage.removeItem(SESSION_KEY);
+      setRoom(undefined);
+      setGame(undefined);
+      setChallenge(undefined);
+      setRemovedNotice(payload.reason === 'PLAYER_REMOVED_BY_HOST' ? 'You were removed by the host.' : 'You have been removed from the room.');
+    }
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('room:view', setRoom);
+    socket.on('room:removed', handleRemoved);
     socket.on('game:view', setGame);
     socket.on('game:event', setLastEvent);
     socket.on('game:challenge-result', setChallenge);
@@ -101,6 +123,7 @@ export function SocketProvider({ children }: PropsWithChildren) {
       socket.off('connect', handleConnect);
       socket.off('disconnect', handleDisconnect);
       socket.off('room:view', setRoom);
+      socket.off('room:removed', handleRemoved);
       socket.off('game:view', setGame);
       socket.off('game:event', setLastEvent);
       socket.off('game:challenge-result', setChallenge);
@@ -132,6 +155,16 @@ export function SocketProvider({ children }: PropsWithChildren) {
     [socket, receiveAck],
   );
 
+  const resetSession = useCallback(() => {
+    localStorage.removeItem(SESSION_KEY);
+    setRoom(undefined);
+    setGame(undefined);
+    setChallenge(undefined);
+    setError(undefined);
+    setRemovedNotice(undefined);
+    socket.emit('room:leave', {}, () => {});
+  }, [socket]);
+
   const value: SocketState = useMemo(
     () => ({
       connection,
@@ -140,6 +173,7 @@ export function SocketProvider({ children }: PropsWithChildren) {
       challenge,
       lastEvent,
       error,
+      removedNotice,
       submitting,
       create: (username) => send('room:create', { username }),
       join: (roomId, username) => send('room:join', { roomId, username }),
@@ -148,10 +182,13 @@ export function SocketProvider({ children }: PropsWithChildren) {
       play: (cardIds, claimedRank) => send('game:play', { cardIds, claimedRank }),
       skip: () => send('game:skip', {}),
       callBluff: () => send('game:call-bluff', {}),
+      removePlayer: (playerId) => send('room:remove-player', { playerId }),
+      resetSession,
       clearChallenge: () => setChallenge(undefined),
       clearError: () => setError(undefined),
+      clearRemovedNotice: () => setRemovedNotice(undefined),
     }),
-    [connection, room, game, challenge, lastEvent, error, submitting, send],
+    [connection, room, game, challenge, lastEvent, error, removedNotice, submitting, send, resetSession],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

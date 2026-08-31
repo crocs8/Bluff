@@ -34,7 +34,7 @@ describe('Real-Time Multiplayer Integration (3 Players)', () => {
     });
   }
 
-  it('connects 3 players, synchronizes lobby, deals cards, and executes gameplay actions in real time', async () => {
+  it('connects 3 players, synchronizes lobby, deals cards, executes gameplay actions in real time, and supports host removal', async () => {
     clientA = await createClient();
     clientB = await createClient();
     clientC = await createClient();
@@ -59,6 +59,9 @@ describe('Real-Time Multiplayer Integration (3 Players)', () => {
     clientA.on('game:challenge-result', (res) => { challengeResult = res; });
     clientB.on('game:challenge-result', (res) => { challengeResult = res; });
     clientC.on('game:challenge-result', (res) => { challengeResult = res; });
+
+    let removedEventC: { reason: string } | undefined;
+    clientC.on('room:removed', (res) => { removedEventC = res; });
 
     // Step 1: Alice creates room
     const createRes = await new Promise<{ ok: boolean; roomId?: string; playerId?: string }>((resolve) => {
@@ -138,10 +141,11 @@ describe('Real-Time Multiplayer Integration (3 Players)', () => {
 
     await new Promise((r) => setTimeout(r, 100));
 
-    // Challenge result received by all clients
+    // Challenge result received by all clients with pileRecipientId
     expect(challengeResult).toBeDefined();
     expect(challengeResult?.revealedCards).toHaveLength(1);
     expect(challengeResult?.revealedCards[0]?.id).toBe(firstCard.id);
+    expect(challengeResult?.pileRecipientId).toBeDefined();
 
     // Step 7: Test session resume on client disconnect
     clientB.disconnect();
@@ -154,5 +158,25 @@ describe('Real-Time Multiplayer Integration (3 Players)', () => {
     expect(resumeRes.ok).toBe(true);
     expect(resumeRes.roomId).toBe(roomId);
     reconnectedClientB.disconnect();
+
+    // Step 8: Host (Alice) removes Charlie
+    const removeRes = await new Promise<{ ok: boolean }>((resolve) => {
+      clientA.emit('room:remove-player', { playerId: playerCId }, (ack) => resolve(ack));
+    });
+    expect(removeRes.ok).toBe(true);
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Charlie received removal notification
+    expect(removedEventC?.reason).toBe('PLAYER_REMOVED_BY_HOST');
+
+    // Charlie cannot resume
+    const reconnectedClientC = await createClient();
+    const resumeResC = await new Promise<{ ok: boolean; code?: string }>((resolve) => {
+      reconnectedClientC.emit('session:resume', { playerId: playerCId }, (ack) => resolve(ack));
+    });
+    expect(resumeResC.ok).toBe(false);
+    expect(resumeResC.code).toBe('PLAYER_REMOVED');
+    reconnectedClientC.disconnect();
   });
 });

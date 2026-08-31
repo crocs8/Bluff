@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { GameOver } from './GameOver.js';
 import * as SocketProviderModule from '../socket-provider.js';
@@ -47,7 +47,9 @@ describe('GameOver Screen', () => {
     },
   };
 
-  it('renders final rankings and clearly identifies winner and final loser', () => {
+  it('renders final rankings, winner and final loser, and calls resetSession on Play Again', () => {
+    const mockResetSession = vi.fn();
+
     vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
       connection: 'CONNECTED',
       room: mockRoom,
@@ -55,6 +57,7 @@ describe('GameOver Screen', () => {
       challenge: undefined,
       lastEvent: undefined,
       error: undefined,
+      removedNotice: undefined,
       submitting: false,
       create: vi.fn(),
       join: vi.fn(),
@@ -63,8 +66,11 @@ describe('GameOver Screen', () => {
       play: vi.fn(),
       skip: vi.fn(),
       callBluff: vi.fn(),
+      removePlayer: vi.fn(),
+      resetSession: mockResetSession,
       clearChallenge: vi.fn(),
       clearError: vi.fn(),
+      clearRemovedNotice: vi.fn(),
     });
 
     render(<GameOver />);
@@ -82,5 +88,10 @@ describe('GameOver Screen', () => {
     // Check final loser
     expect(screen.getByText(/LAST PLACE/i)).toBeInTheDocument();
     expect(screen.getByText(/Charlie/i)).toBeInTheDocument();
+
+    // Click Play Again
+    const playAgainBtn = screen.getByRole('button', { name: /PLAY AGAIN/i });
+    fireEvent.click(playAgainBtn);
+    expect(mockResetSession).toHaveBeenCalled();
   });
 });

@@ -72,6 +72,23 @@ export function createBluffServer(options: { random?: RandomSource; now?: () => 
       return { revision: 0 };
     }));
 
+    socket.on('room:remove-player', (payload, ack) => execute(socket, ack, () => {
+      const requesterId = requirePlayerId(socket);
+      const { room, removedPlayer, events } = manager.removePlayer(requesterId, payload.playerId);
+      if (removedPlayer.socketId) {
+        io.to(removedPlayer.socketId).emit('room:removed', { reason: 'PLAYER_REMOVED_BY_HOST' });
+        const targetSocket = io.of('/').sockets.get(removedPlayer.socketId);
+        if (targetSocket) {
+          targetSocket.leave(room.roomId);
+          targetSocket.data.playerId = undefined;
+        }
+      }
+      emitDomainEvents(io, room, events);
+      emitRoomViews(io, manager, room);
+      emitGameViews(io, manager, room);
+      return { revision: room.revision };
+    }));
+
     socket.on('room:configure', (payload, ack) => execute(socket, ack, () => {
       const room = manager.configureRoom(requirePlayerId(socket), payload.numberOfDecks);
       emitRoomViews(io, manager, room);
@@ -139,7 +156,16 @@ function emitGameViews(io: BluffServer['io'], manager: GameManager, room: RoomSe
 function emitDomainEvents(io: BluffServer['io'], room: RoomSession, events: DomainEvent[]): void {
   for (const event of events) {
     if (event.type === 'ChallengeResolved') {
-      io.to(room.roomId).emit('game:challenge-result', { challengerId: event.challengerId, challengedPlayerId: event.challengedPlayerId, claimedRank: event.claimedRank, revealedCards: event.revealedCards, wasTruthful: event.wasTruthful, revision: room.revision });
+      const pileRecipientId = event.wasTruthful ? event.challengerId : event.challengedPlayerId;
+      io.to(room.roomId).emit('game:challenge-result', {
+        challengerId: event.challengerId,
+        challengedPlayerId: event.challengedPlayerId,
+        claimedRank: event.claimedRank,
+        revealedCards: event.revealedCards,
+        wasTruthful: event.wasTruthful,
+        pileRecipientId,
+        revision: room.revision,
+      });
     }
     const publicEvent: PublicGameEvent = event.type === 'ChallengeResolved'
       ? { type: event.type, challengerId: event.challengerId, challengedPlayerId: event.challengedPlayerId, wasTruthful: event.wasTruthful }

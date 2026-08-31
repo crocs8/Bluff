@@ -26,6 +26,7 @@ export interface GameState {
   readonly players: ReadonlyMap<string, GamePlayer>;
   readonly reservePile: Card[];
   readonly playingPile: Card[];
+  readonly discardPile: Card[];
   readonly currentPlayerId: string | undefined;
   readonly roundLockedRank: Rank | undefined;
   readonly lastPlay: LastPlay | undefined;
@@ -52,7 +53,7 @@ export function createGame(input: CreateGameInput): GameState {
   }
   return {
     roomId: input.roomId, numberOfDecks: input.numberOfDecks, phase: 'PLAYING', seatingOrder, players,
-    reservePile: deal.reservePile, playingPile: [], currentPlayerId: seatingOrder[random.nextInt(seatingOrder.length)]!, roundLockedRank: undefined, lastPlay: undefined, lastPlayedBy: undefined,
+    reservePile: deal.reservePile, playingPile: [], discardPile: [], currentPlayerId: seatingOrder[random.nextInt(seatingOrder.length)]!, roundLockedRank: undefined, lastPlay: undefined, lastPlayedBy: undefined,
     rankings: [], roundNumber: 1,
   };
 }

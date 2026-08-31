@@ -20,23 +20,30 @@ function retainOneCard(state: GameState, playerId: string, rank: string): string
   const player = state.players.get(playerId)!;
   const card = player.hand.find((candidate) => candidate.rank === rank);
   if (!card) throw new Error('Expected test rank in hand');
+  const discarded = player.hand.filter((c) => c.id !== card.id);
   player.hand.splice(0, player.hand.length, card);
+  (state.discardPile as any)?.push?.(...discarded);
   return card.id;
 }
 
 describe('final plays, ranking, and game end', () => {
-  it('ranks a truthful final player when the immediate next player skips, then starts at the next active seat', () => {
+  it('allows turn to continue to next player when immediate next player skips after final card play', () => {
     let state = game();
     const finalCard = retainOneCard(state, 'A', 'A');
     state = accepted(applyAction(state, 'A', { type: 'PLAY', cardIds: [finalCard], claimedRank: 'A' }));
+    // B skips — turn MUST advance to C so C gets opportunity to challenge A
     const result = applyAction(state, 'B', { type: 'SKIP' });
     state = accepted(result);
 
-    expect(state.players.get('A')).toMatchObject({ status: 'ELIMINATED', rank: 1 });
-    expect(state.rankings).toEqual(['A']);
-    expect(state.currentPlayerId).toBe('B');
-    expect(state.lastPlay).toBeUndefined();
-    expect(result.ok && result.events).toContainEqual(expect.objectContaining({ type: 'RoundEnded', reason: 'FINAL_PLAY_SAFE', starterId: 'B' }));
+    expect(state.currentPlayerId).toBe('C');
+    expect(state.lastPlay?.playerId).toBe('A');
+    expect(state.phase).toBe('PLAYING');
+
+    // C challenges A
+    const challengeRes = accepted(applyAction(state, 'C', { type: 'CALL_BLUFF' }));
+    // A was truthful -> A is ranked 1st
+    expect(challengeRes.players.get('A')).toMatchObject({ status: 'ELIMINATED', rank: 1 });
+    expect(challengeRes.rankings).toEqual(['A']);
   });
 
   it('ranks a truthful final player when challenged and skips that eliminated intended starter', () => {

@@ -64,8 +64,8 @@ export function ChallengeOverlay() {
   const wasTruthful = challenge.wasTruthful;
   const isBluff = !wasTruthful;
 
-  const pileWinner = isBluff ? challenger : challenged;
-  const pileWinnerName = pileWinner?.id === room.selfPlayerId ? 'You' : (pileWinner?.username ?? 'Winner');
+  const recipient = players.find((p) => p.id === challenge.pileRecipientId) ?? (isBluff ? challenged : challenger);
+  const recipientName = recipient?.id === room.selfPlayerId ? 'You' : (recipient?.username ?? 'Player');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop select-none">
@@ -113,50 +113,49 @@ export function ChallengeOverlay() {
         </div>
       )}
 
-      {/* ── Phase 3: Final Result (BLUFF! or TRUTHFUL!) ──── */}
+      {/* ── Phase 3: Final Result (BLUFF CAUGHT! or CHALLENGE FAILED) ──── */}
       {phase === 'result' && (
         <div
           className={[
             'modal-dialog w-full max-w-sm rounded-3xl p-6 text-center',
             isBluff
               ? 'border-red-600/80 shadow-[0_0_50px_rgba(220,38,38,0.4)]'
-              : 'border-emerald-500/80 shadow-[0_0_50px_rgba(16,185,129,0.4)]',
+              : 'border-amber-500/80 shadow-[0_0_50px_rgba(245,196,81,0.4)]',
           ].join(' ')}
         >
           {/* Result Title */}
           <h2
             className={[
-              'text-4xl font-black tracking-wider mb-1',
-              isBluff ? 'text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]' : 'text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.8)]',
+              'text-3xl font-black tracking-wider mb-1 uppercase',
+              isBluff ? 'text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]' : 'text-amber-400 drop-shadow-[0_0_15px_rgba(245,196,81,0.8)]',
             ].join(' ')}
           >
-            {isBluff ? 'BLUFF!' : 'TRUTHFUL!'}
+            {isBluff ? 'BLUFF CAUGHT!' : 'CHALLENGE FAILED'}
           </h2>
 
-          <p className="text-zinc-300 text-xs mb-5">
-            {isBluff ? `${challengedName} was caught!` : `${challengedName} was telling the truth!`}
+          <p className="text-zinc-300 text-xs mb-4">
+            {isBluff
+              ? `${challengerName} caught ${challengedName} bluffing.`
+              : `${challengerName} challenged ${challengedName}, but ${challengedName} was truthful.`}
           </p>
 
           {/* Revealed Cards Display */}
-          <div className="flex items-center justify-center gap-2 flex-wrap mb-5">
+          <div className="flex items-center justify-center gap-2 flex-wrap mb-4">
             {challenge.revealedCards.map((card) => (
               <CardView key={card.id} card={card} size="sm" />
             ))}
           </div>
 
-          {/* Pile Winner Info */}
-          <div className="my-4">
+          {/* Pile Recipient Info */}
+          <div className="my-3 p-2.5 rounded-xl bg-black/50 border border-[#f5c451]/30">
             <p className="text-zinc-200 font-bold text-sm">
-              {isBluff ? `${challengerName} wins the pile` : `${challengedName} takes the pile`}
-            </p>
-            <p className="text-[#f5c451] text-xs font-semibold mt-0.5">
-              (+{challenge.revealedCards.length} cards)
+              <span className="text-[#f5c451]">{recipientName}</span> takes the pile
             </p>
           </div>
 
-          {/* Pile Winner Avatar with Glow */}
-          <div className="size-12 rounded-full mx-auto my-3 border-2 border-[#f5c451] bg-[#1a3827] grid place-items-center text-white font-bold text-base avatar-ring-turn">
-            {pileWinner?.username[0]?.toUpperCase() ?? 'P'}
+          {/* Recipient Avatar */}
+          <div className="size-12 rounded-full mx-auto my-2 border-2 border-[#f5c451] bg-[#1a3827] grid place-items-center text-white font-bold text-base avatar-ring-turn">
+            {recipient?.username[0]?.toUpperCase() ?? 'P'}
           </div>
 
           {/* Continue Button */}
@@ -165,7 +164,7 @@ export function ChallengeOverlay() {
             onClick={clearChallenge}
             className="w-full mt-4 btn-play rounded-xl py-3.5 font-black text-sm tracking-wider uppercase"
           >
-            CONTINUE
+            CLOSE
           </button>
         </div>
       )}
