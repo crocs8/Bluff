@@ -77,11 +77,12 @@ describe('ActionDock Component', () => {
     clearRemovedNotice: vi.fn(),
   };
 
-  it('renders cards in hand and action buttons', () => {
+  it('renders cards in hand, sort button, and action buttons', () => {
     vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue(baseMock);
 
     render(<ActionDock />);
     expect(screen.getAllByRole('button', { name: /K of/i }).length).toBe(2);
+    expect(screen.getByRole('button', { name: /SORT/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /CALL BLUFF/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /SKIP/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /PLAY/i })).toBeInTheDocument();
@@ -101,6 +102,82 @@ describe('ActionDock Component', () => {
     fireEvent.click(playBtn);
 
     expect(mockPlay).toHaveBeenCalledWith(['c1'], '3');
+  });
+
+  it('sorts the local hand in rank order A -> 2 -> ... -> K upon clicking SORT', () => {
+    const unsortedHandGame: GameViewEnvelope = {
+      ...mockGame,
+      game: {
+        ...mockGame.game,
+        hand: [
+          { id: 'c1', rank: 'K', suit: 'spades', deckIndex: 0 },
+          { id: 'c2', rank: '5', suit: 'hearts', deckIndex: 0 },
+          { id: 'c3', rank: 'A', suit: 'diamonds', deckIndex: 0 },
+          { id: 'c4', rank: '7', suit: 'clubs', deckIndex: 0 },
+        ],
+      },
+    };
+
+    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
+      ...baseMock,
+      game: unsortedHandGame,
+    });
+
+    render(<ActionDock />);
+
+    // Default order should be K, 5, A, 7
+    let cardButtons = screen.getAllByRole('button', { name: /of/i });
+    expect(cardButtons[0]).toHaveAccessibleName('K of spades');
+    expect(cardButtons[1]).toHaveAccessibleName('5 of hearts');
+    expect(cardButtons[2]).toHaveAccessibleName('A of diamonds');
+    expect(cardButtons[3]).toHaveAccessibleName('7 of clubs');
+
+    // Click SORT button
+    const sortBtn = screen.getByRole('button', { name: /SORT/i });
+    fireEvent.click(sortBtn);
+
+    // After SORT: A, 5, 7, K
+    cardButtons = screen.getAllByRole('button', { name: /of/i });
+    expect(cardButtons[0]).toHaveAccessibleName('A of diamonds');
+    expect(cardButtons[1]).toHaveAccessibleName('5 of hearts');
+    expect(cardButtons[2]).toHaveAccessibleName('7 of clubs');
+    expect(cardButtons[3]).toHaveAccessibleName('K of spades');
+  });
+
+  it('preserves ID-based card selection across sorting and plays correct card IDs', () => {
+    const mixedHandGame: GameViewEnvelope = {
+      ...mockGame,
+      game: {
+        ...mockGame.game,
+        roundLockedRank: 'A',
+        hand: [
+          { id: 'c1', rank: 'K', suit: 'spades', deckIndex: 0 },
+          { id: 'c2', rank: 'A', suit: 'diamonds', deckIndex: 0 },
+        ],
+      },
+    };
+
+    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
+      ...baseMock,
+      game: mixedHandGame,
+    });
+
+    render(<ActionDock />);
+
+    // Select 'A of diamonds' (second card in default order)
+    const cardA = screen.getByRole('button', { name: 'A of diamonds' });
+    fireEvent.click(cardA);
+
+    // Click SORT (A will become first card)
+    const sortBtn = screen.getByRole('button', { name: /SORT/i });
+    fireEvent.click(sortBtn);
+
+    // Click PLAY
+    const playBtn = screen.getByRole('button', { name: /PLAY/i });
+    fireEvent.click(playBtn);
+
+    // Expect 'c2' (card A's ID) to have been sent
+    expect(mockPlay).toHaveBeenCalledWith(['c2'], 'A');
   });
 
   it('handles SKIP action when legal', () => {

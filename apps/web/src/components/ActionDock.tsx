@@ -1,13 +1,30 @@
 import { useEffect, useState } from 'react';
-import { RANKS, type Rank } from '@bluff/shared';
+import { RANKS, type Card, type Rank } from '@bluff/shared';
 import { CardView, TurnTimer } from './shared.js';
 import { useBluffSocket } from '../socket-provider.js';
+
+const RANK_ORDER: Record<Rank, number> = {
+  A: 0,
+  '2': 1,
+  '3': 2,
+  '4': 3,
+  '5': 4,
+  '6': 5,
+  '7': 6,
+  '8': 7,
+  '9': 8,
+  '10': 9,
+  J: 10,
+  Q: 11,
+  K: 12,
+};
 
 export function ActionDock() {
   const { game, room, play, skip, callBluff, submitting, error, clearError } = useBluffSocket();
   const [selected, setSelected] = useState<string[]>([]);
   const [claimedRank, setClaimedRank] = useState<Rank>('A');
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [orderedCardIds, setOrderedCardIds] = useState<string[]>([]);
 
   const deadline = game?.turnDeadlineAt;
   useEffect(() => {
@@ -25,6 +42,32 @@ export function ActionDock() {
 
   const { legalActions, hand, roundNumber, roundLockedRank } = game.game;
   const isMyTurn = legalActions.canPlay || legalActions.canSkip || legalActions.canCallBluff;
+
+  // Synchronize local visual ordering with incoming authoritative hand
+  useEffect(() => {
+    const cardMap = new Map(hand.map((c) => [c.id, c]));
+
+    setOrderedCardIds((prev) => {
+      // Keep existing ordered IDs that are still in hand
+      const existing = prev.filter((id) => cardMap.has(id));
+      const existingSet = new Set(existing);
+
+      // Find any newly received cards from server (e.g., after challenge or deal)
+      const newlyReceived = hand.filter((c) => !existingSet.has(c.id)).map((c) => c.id);
+
+      // If no overlap with previous IDs (e.g. initial deal or fresh round)
+      if (existing.length === 0) {
+        return hand.map((c) => c.id);
+      }
+
+      // If cards were played or new cards received, append new cards to the right without re-sorting
+      if (newlyReceived.length > 0 || existing.length !== prev.length) {
+        return [...existing, ...newlyReceived];
+      }
+
+      return prev;
+    });
+  }, [hand]);
 
   useEffect(() => {
     if (roundLockedRank) {
@@ -61,25 +104,22 @@ export function ActionDock() {
     setSelected([]);
   }
 
-  // Calculate dynamic overlap for fanned hand so cards never overflow screen
-  const totalCards = hand.length;
-  const getFanRotation = (index: number) => {
-    if (totalCards <= 1) return 0;
-    const mid = (totalCards - 1) / 2;
-    return (index - mid) * Math.min(2.5, 20 / totalCards);
-  };
+  // Local Sort by Rank: A -> 2 -> 3 -> ... -> K
+  function handleSort() {
+    const sorted = [...hand].sort((a, b) => {
+      const rankDiff = RANK_ORDER[a.rank] - RANK_ORDER[b.rank];
+      if (rankDiff !== 0) return rankDiff;
+      return a.id.localeCompare(b.id);
+    });
+    setOrderedCardIds(sorted.map((c) => c.id));
+  }
 
-  // Overlap spacing calculation
-  const overlapMarginClass =
-    totalCards > 12
-      ? '-ml-8 sm:-ml-9'
-      : totalCards > 8
-        ? '-ml-6 sm:-ml-7'
-        : totalCards > 5
-          ? '-ml-4 sm:-ml-5'
-          : totalCards > 2
-            ? '-ml-2 sm:-ml-3'
-            : 'ml-1';
+  // Map ordered IDs back to Card objects
+  const cardMap = new Map(hand.map((c) => [c.id, c]));
+  const displayCards: Card[] = orderedCardIds
+    .map((id) => cardMap.get(id))
+    .filter((c): c is Card => c !== undefined);
+  const renderedCards = displayCards.length === hand.length ? displayCards : hand;
 
   return (
     <section className="w-full shrink-0 select-none z-20 flex flex-col justify-end">
@@ -102,26 +142,46 @@ export function ActionDock() {
         </div>
       )}
 
-      {/* ── Player's Fanned Hand ──────────────────────── */}
-      <div className="relative pt-3 pb-1 w-full max-w-xl mx-auto overflow-x-hidden flex justify-center items-end px-2">
+      {/* ── Hand Header: Selection info & Sort Button ── */}
+      <div className="flex items-center justify-between px-4 max-w-lg mx-auto w-full mb-0.5">
+        <span className="text-[11px] text-zinc-400 font-semibold tracking-wide">
+          {isMyTurn && legalActions.canPlay
+            ? `Select 1 – ${legalActions.maxPlayCards} cards`
+            : `${hand.length} Cards in Hand`}
+        </span>
+
+        {/* Local UI Sort Button */}
+        <button
+          type="button"
+          onClick={handleSort}
+          disabled={hand.length <= 1}
+          className="px-2.5 py-1 rounded-lg bg-black/60 border border-[#a87e2b]/60 text-[#f5c451] font-extrabold text-[11px] hover:bg-black/80 active:scale-95 transition-all flex items-center gap-1 shadow-sm disabled:opacity-35 disabled:pointer-events-none"
+          title="Sort hand by rank (A to K)"
+        >
+          <span>SORT</span>
+          <span className="text-[10px]">↕</span>
+        </button>
+      </div>
+
+      {/* ── Horizontally Scrollable Player's Hand ─────── */}
+      <div className="relative w-full max-w-2xl mx-auto overflow-x-auto no-scrollbar touch-pan-x py-2.5 px-3">
         {hand.length === 0 ? (
           <div className="py-4 text-center text-zinc-500 text-xs font-semibold">
             No cards in hand
           </div>
         ) : (
-          <div className="flex items-end justify-center py-2 px-1">
-            {hand.map((card, idx) => (
+          <div className="flex items-end min-w-max justify-start sm:justify-center -space-x-3.5 sm:-space-x-4 px-2">
+            {renderedCards.map((card, idx) => (
               <div
                 key={card.id}
-                className={idx > 0 ? overlapMarginClass : ''}
                 style={{ zIndex: idx + 1 }}
+                className="transition-transform duration-150"
               >
                 <CardView
                   card={card}
                   selected={selected.includes(card.id)}
                   onClick={() => toggleCard(card.id)}
                   disabled={!legalActions.canPlay}
-                  rotation={getFanRotation(idx)}
                   size="md"
                 />
               </div>
@@ -130,7 +190,7 @@ export function ActionDock() {
         )}
       </div>
 
-      {/* ── Unlocked Rank Selector Strip (Only shown when choosing first rank) ── */}
+      {/* ── Unlocked Rank Selector Strip (Only shown on unstarted round) ── */}
       {roundLockedRank === undefined && legalActions.canPlay && (
         <div className="px-3 max-w-md mx-auto w-full mb-1">
           <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar py-0.5">
