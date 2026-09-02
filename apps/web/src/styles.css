@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 
-/* ── Base ─────────────────────────────────────── */
+/* ── Base Reset & Mobile Optimizations ─────────── */
 :root {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   color: #f5f0dc;
@@ -8,25 +8,36 @@
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   user-select: none;
+  --safe-top: max(env(safe-area-inset-top, 0px), 8px);
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+  --safe-left: max(env(safe-area-inset-left, 0px), 8px);
+  --safe-right: max(env(safe-area-inset-right, 0px), 8px);
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 html, body {
   margin: 0;
   padding: 0;
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
+  min-height: 100dvh;
   background: #020906;
   overscroll-behavior: none;
+  overflow-x: hidden;
+  touch-action: manipulation;
 }
 
 body {
   background: radial-gradient(circle at 50% 30%, #0c3324 0%, #051a12 45%, #020906 85%);
-  min-height: 100dvh;
   min-width: 320px;
 }
 
-button, input { font: inherit; }
+button, input {
+  font: inherit;
+}
 
 input {
   color: #f5f0dc;
@@ -39,18 +50,18 @@ input:focus {
   box-shadow: 0 0 10px rgba(229, 169, 60, 0.3);
 }
 
-/* ── Reference Design Tokens ───────────────────── */
+/* ── Felt Table Aesthetics ────────────────────── */
 .felt-bg {
   background: radial-gradient(ellipse at 50% 45%, #0f4632 0%, #0a3324 45%, #041710 85%);
 }
 
 .table-felt {
   background: radial-gradient(ellipse at 50% 50%, #11523b 0%, #0a3827 50%, #031c13 100%);
-  border: 3px solid #c89838;
+  border: clamp(2px, 0.6vw, 4px) solid #c89838;
   box-shadow: 
-    inset 0 0 45px rgba(0, 0, 0, 0.85),
+    inset 0 0 clamp(20px, 5vw, 55px) rgba(0, 0, 0, 0.85),
     inset 0 0 15px rgba(200, 152, 56, 0.25),
-    0 0 25px rgba(0, 0, 0, 0.9),
+    0 0 30px rgba(0, 0, 0, 0.9),
     0 0 15px rgba(200, 152, 56, 0.2);
 }
 
@@ -76,7 +87,7 @@ input:focus {
   box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6);
 }
 
-/* ── Reference Action Buttons ─────────────────── */
+/* ── Action Buttons ───────────────────────────── */
 .btn-play {
   background: linear-gradient(180deg, #1f9d55 0%, #13773e 50%, #0a5229 100%);
   border: 1px solid #38d67c;
@@ -84,7 +95,7 @@ input:focus {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
   box-shadow: 0 4px 15px rgba(20, 130, 68, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.3);
 }
-.btn-play:active {
+.btn-play:active:not(:disabled) {
   background: linear-gradient(180deg, #13773e 0%, #0a5229 100%);
   transform: scale(0.97);
 }
@@ -96,7 +107,7 @@ input:focus {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   box-shadow: 0 4px 15px rgba(109, 80, 21, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2);
 }
-.btn-skip:active {
+.btn-skip:active:not(:disabled) {
   background: linear-gradient(180deg, #6d5015 0%, #4a350b 100%);
   transform: scale(0.97);
 }
@@ -108,7 +119,7 @@ input:focus {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   box-shadow: 0 4px 15px rgba(158, 28, 28, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.3);
 }
-.btn-bluff:active {
+.btn-bluff:active:not(:disabled) {
   background: linear-gradient(180deg, #9e1c1c 0%, #680d0d 100%);
   transform: scale(0.97);
 }
@@ -120,7 +131,7 @@ input:focus {
   font-weight: 800;
   box-shadow: 0 4px 18px rgba(216, 159, 40, 0.45), inset 0 1px 1px #fff;
 }
-.btn-gold:active {
+.btn-gold:active:not(:disabled) {
   background: linear-gradient(180deg, #d89f28 0%, #a47214 100%);
   transform: scale(0.97);
 }
@@ -128,7 +139,7 @@ input:focus {
 /* ── Playing Cards ─────────────────────────────── */
 .playing-card {
   background: #ffffff;
-  border-radius: 8px;
+  border-radius: clamp(4px, 1.2vw, 8px);
   box-shadow: -2px 3px 10px rgba(0, 0, 0, 0.65), 0 1px 3px rgba(0, 0, 0, 0.4);
   position: relative;
   transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.18s ease;
@@ -136,35 +147,79 @@ input:focus {
 }
 
 .playing-card.selected {
-  transform: translateY(-24px) scale(1.04) !important;
+  transform: translateY(-22px) scale(1.05) !important;
   box-shadow: 0 12px 28px rgba(245, 196, 81, 0.6), 0 0 0 2.5px #f5c451;
-  z-index: 30 !important;
+  z-index: 40 !important;
 }
 
 .card-pattern-back {
   background: 
-    radial-gradient(circle at center, #8a4a1c 0%, #522709 100%),
-    repeating-linear-gradient(45deg, #703812 0, #703812 2px, #4d2307 2px, #4d2307 4px);
-  border: 1px solid #c58245;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+    radial-gradient(circle at center, #1b4b7a 0%, #0d2845 100%),
+    repeating-linear-gradient(45deg, #163d63 0, #163d63 2px, #0b223b 2px, #0b223b 4px);
+  border: 1px solid #4886c5;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.7);
+  border-radius: clamp(4px, 1.2vw, 8px);
 }
 
-/* ── Avatars & Rings ───────────────────────────── */
+/* ── 3D Card Flip Animation (In-Table Reveal) ─── */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.flip-card-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.flip-card-front, .flip-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  border-radius: inherit;
+  top: 0;
+  left: 0;
+}
+
+.flip-card-front {
+  transform: rotateY(0deg);
+}
+
+.flip-card-back {
+  transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flip-card-inner {
+    transition: none;
+  }
+}
+
+/* ── Avatars & Turn Pulse ─────────────────────── */
 .avatar-ring-turn {
-  box-shadow: 0 0 0 2.5px #f5c451, 0 0 15px #f5c451, 0 0 25px rgba(245, 196, 81, 0.5);
+  box-shadow: 0 0 0 2.5px #f5c451, 0 0 14px #f5c451, 0 0 24px rgba(245, 196, 81, 0.5);
   animation: pulse-turn 2s infinite ease-in-out;
 }
 
 @keyframes pulse-turn {
-  0%, 100% { box-shadow: 0 0 0 2.5px #f5c451, 0 0 12px #f5c451; }
-  50% { box-shadow: 0 0 0 3px #ffe599, 0 0 24px #f5c451, 0 0 35px rgba(245, 196, 81, 0.6); }
+  0%, 100% { box-shadow: 0 0 0 2.5px #f5c451, 0 0 10px #f5c451; }
+  50% { box-shadow: 0 0 0 3.5px #ffe599, 0 0 22px #f5c451, 0 0 32px rgba(245, 196, 81, 0.6); }
 }
 
 /* ── Central Claim Plaque ─────────────────────── */
 .claim-plaque {
-  background: rgba(3, 16, 11, 0.85);
+  background: rgba(3, 16, 11, 0.88);
   border: 1.5px solid #bd8f32;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7), inset 0 0 12px rgba(189, 143, 50, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.75), inset 0 0 14px rgba(189, 143, 50, 0.2);
 }
 
 /* ── Rank Selector Strip ───────────────────────── */
@@ -195,9 +250,20 @@ input:focus {
 }
 
 /* ── Safe Area Support ────────────────────────── */
-.safe-top { padding-top: max(env(safe-area-inset-top, 0px), 8px); }
-.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px); }
+.safe-top { padding-top: var(--safe-top); }
+.safe-bottom { padding-bottom: var(--safe-bottom); }
+.safe-left { padding-left: var(--safe-left); }
+.safe-right { padding-right: var(--safe-right); }
 
 /* ── Suit Colors ──────────────────────────────── */
 .suit-red { color: #d32f2f; }
 .suit-black { color: #1e1e1e; }
+
+/* ── Scrollbar Utility ────────────────────────── */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

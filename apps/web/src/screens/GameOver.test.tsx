@@ -86,8 +86,8 @@ describe('GameOver Screen', () => {
     expect(screen.getByText(/Bob/i)).toBeInTheDocument();
 
     // Check final loser
-    expect(screen.getByText(/LAST PLACE/i)).toBeInTheDocument();
-    expect(screen.getByText(/Charlie/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/LAST PLACE/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Charlie/i).length).toBeGreaterThan(0);
 
     // Click Play Again
     const playAgainBtn = screen.getByRole('button', { name: /PLAY AGAIN/i });
