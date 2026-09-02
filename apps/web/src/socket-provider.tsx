@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { io, type Socket } from 'socket.io-client';
 
-import type { Rank } from '@bluff/shared';
+import { QUICK_CHAT_MESSAGES, type QuickChatMessageId, type Rank } from '@bluff/shared';
 
 import type { ChallengeResult, GameViewEnvelope, PublicGameEvent, RoomView } from './types.js';
 
@@ -27,6 +27,7 @@ export interface SocketState {
   error: string | undefined;
   removedNotice: string | undefined;
   submitting: boolean;
+  chatMessages: Record<string, string | undefined>;
   // Actions
   create(username: string): void;
   join(roomId: string, username: string): void;
@@ -37,6 +38,7 @@ export interface SocketState {
   callBluff(): void;
   removePlayer(playerId: string): void;
   resetSession(): void;
+  sendQuickChat(messageId: QuickChatMessageId): void;
   clearChallenge(): void;
   clearError(): void;
   clearRemovedNotice(): void;
@@ -55,6 +57,8 @@ export function SocketProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | undefined>(undefined);
   const [removedNotice, setRemovedNotice] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Record<string, string | undefined>>({});
+  const chatTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Keep track of whether the socket has had its first successful connect
   const didConnect = useRef(false);
@@ -107,6 +111,30 @@ export function SocketProvider({ children }: PropsWithChildren) {
       setRemovedNotice(payload.reason === 'PLAYER_REMOVED_BY_HOST' ? 'You were removed by the host.' : 'You have been removed from the room.');
     }
 
+    function handleQuickChatMessage(payload: { playerId: string; messageId: QuickChatMessageId }) {
+      const text = QUICK_CHAT_MESSAGES[payload.messageId];
+      if (!text) return;
+
+      setChatMessages((prev) => ({ ...prev, [payload.playerId]: text }));
+
+      const existing = chatTimers.current.get(payload.playerId);
+      if (existing) clearTimeout(existing);
+
+      const timer = setTimeout(() => {
+        setChatMessages((prev) => {
+          if (prev[payload.playerId] === text) {
+            const next = { ...prev };
+            delete next[payload.playerId];
+            return next;
+          }
+          return prev;
+        });
+        chatTimers.current.delete(payload.playerId);
+      }, 2700);
+
+      chatTimers.current.set(payload.playerId, timer);
+    }
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('room:view', setRoom);
@@ -114,6 +142,7 @@ export function SocketProvider({ children }: PropsWithChildren) {
     socket.on('game:view', setGame);
     socket.on('game:event', setLastEvent);
     socket.on('game:challenge-result', setChallenge);
+    socket.on('quick-chat:message', handleQuickChatMessage);
     socket.on('action:error', (e: { message: string }) => {
       setError(e.message);
       setSubmitting(false);
@@ -127,6 +156,7 @@ export function SocketProvider({ children }: PropsWithChildren) {
       socket.off('game:view', setGame);
       socket.off('game:event', setLastEvent);
       socket.off('game:challenge-result', setChallenge);
+      socket.off('quick-chat:message', handleQuickChatMessage);
       socket.off('action:error');
       socket.disconnect();
     };
@@ -165,6 +195,13 @@ export function SocketProvider({ children }: PropsWithChildren) {
     socket.emit('room:leave', {}, () => {});
   }, [socket]);
 
+  const sendQuickChat = useCallback(
+    (messageId: QuickChatMessageId) => {
+      socket.emit('quick-chat:send', { messageId }, () => {});
+    },
+    [socket],
+  );
+
   const value: SocketState = useMemo(
     () => ({
       connection,
@@ -175,6 +212,7 @@ export function SocketProvider({ children }: PropsWithChildren) {
       error,
       removedNotice,
       submitting,
+      chatMessages,
       create: (username) => send('room:create', { username }),
       join: (roomId, username) => send('room:join', { roomId, username }),
       configure: (numberOfDecks) => send('room:configure', { numberOfDecks }),
@@ -184,11 +222,12 @@ export function SocketProvider({ children }: PropsWithChildren) {
       callBluff: () => send('game:call-bluff', {}),
       removePlayer: (playerId) => send('room:remove-player', { playerId }),
       resetSession,
+      sendQuickChat,
       clearChallenge: () => setChallenge(undefined),
       clearError: () => setError(undefined),
       clearRemovedNotice: () => setRemovedNotice(undefined),
     }),
-    [connection, room, game, challenge, lastEvent, error, removedNotice, submitting, send, resetSession],
+    [connection, room, game, challenge, lastEvent, error, removedNotice, submitting, chatMessages, send, resetSession, sendQuickChat],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

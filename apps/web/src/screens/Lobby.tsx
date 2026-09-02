@@ -160,7 +160,7 @@ export function Lobby() {
             {/* Static Settings Details */}
             <div className="p-2.5 rounded-xl bg-black/40 border border-zinc-800 flex items-center justify-between">
               <span className="text-zinc-300 font-medium">Turn Timer</span>
-              <span className="text-zinc-300 font-bold">45s</span>
+              <span className="text-zinc-300 font-bold">30s</span>
             </div>
 
             <div className="p-2.5 rounded-xl bg-black/40 border border-zinc-800 flex items-center justify-between">

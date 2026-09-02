@@ -1,4 +1,4 @@
-import type { Card, DeckCount, Rank } from '@bluff/shared';
+import type { Card, DeckCount, Rank, QuickChatMessageId } from '@bluff/shared';
 import type { DomainEvent, PlayerView } from '@bluff/game-engine';
 
 export interface RoomView {
@@ -49,6 +49,7 @@ export interface ClientToServerEvents {
   'game:skip': (payload: Record<string, never>, ack: Ack) => void;
   'game:call-bluff': (payload: Record<string, never>, ack: Ack) => void;
   'session:resume': (payload: { playerId: string }, ack: Ack) => void;
+  'quick-chat:send': (payload: { messageId: string }, ack: Ack) => void;
 }
 
 export interface ServerToClientEvents {
@@ -57,6 +58,7 @@ export interface ServerToClientEvents {
   'game:view': (view: GameViewEnvelope) => void;
   'game:event': (event: PublicGameEvent & { readonly revision: number }) => void;
   'game:challenge-result': (result: ChallengeResult) => void;
+  'quick-chat:message': (payload: { playerId: string; messageId: QuickChatMessageId }) => void;
   'action:error': (error: { code: string; message: string }) => void;
   'connection:status': (payload: { playerId: string; status: 'CONNECTED' | 'DISCONNECTED' }) => void;
 }

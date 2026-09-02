@@ -6,7 +6,7 @@ import { TableCenter } from '../components/TableCenter.js';
 import { ActionDock } from '../components/ActionDock.js';
 
 export function GameTable() {
-  const { game, room, lastEvent, removePlayer, resetSession, connection } = useBluffSocket();
+  const { game, room, lastEvent, removePlayer, resetSession, connection, chatMessages } = useBluffSocket();
   const [showMenu, setShowMenu] = useState(false);
   const [roundToast, setRoundToast] = useState<string | null>(null);
   const currentPlayerId = game?.game.currentPlayerId;
@@ -94,6 +94,7 @@ export function GameTable() {
           opponents={opponents}
           currentPlayerId={state.currentPlayerId}
           hostPlayerId={room.hostPlayerId}
+          chatMessages={chatMessages}
         />
 
         {/* ── Central Claim Plaque, Cards & In-Table Reveal ── */}
@@ -111,6 +112,7 @@ export function GameTable() {
               isHost={me.id === room.hostPlayerId}
               isMe
               showCardsBack={false}
+              chatMessage={chatMessages?.[me.id]}
             />
           </div>
         )}

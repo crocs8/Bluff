@@ -26,33 +26,37 @@ describe('Lobby Screen', () => {
     ],
   };
 
+  const baseMock = {
+    connection: 'CONNECTED' as const,
+    room: mockRoom,
+    game: undefined,
+    challenge: undefined,
+    lastEvent: undefined,
+    error: undefined,
+    removedNotice: undefined,
+    submitting: false,
+    chatMessages: {},
+    create: vi.fn(),
+    join: vi.fn(),
+    configure: mockConfigure,
+    start: mockStart,
+    play: vi.fn(),
+    skip: vi.fn(),
+    callBluff: vi.fn(),
+    removePlayer: mockRemovePlayer,
+    resetSession: vi.fn(),
+    sendQuickChat: vi.fn(),
+    clearChallenge: vi.fn(),
+    clearError: vi.fn(),
+    clearRemovedNotice: vi.fn(),
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders room code, player list with host badge, and host start button', () => {
-    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
-      connection: 'CONNECTED',
-      room: mockRoom,
-      game: undefined,
-      challenge: undefined,
-      lastEvent: undefined,
-      error: undefined,
-      removedNotice: undefined,
-      submitting: false,
-      create: vi.fn(),
-      join: vi.fn(),
-      configure: mockConfigure,
-      start: mockStart,
-      play: vi.fn(),
-      skip: vi.fn(),
-      callBluff: vi.fn(),
-      removePlayer: mockRemovePlayer,
-      resetSession: vi.fn(),
-      clearChallenge: vi.fn(),
-      clearError: vi.fn(),
-      clearRemovedNotice: vi.fn(),
-    });
+    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue(baseMock);
 
     render(<Lobby />);
     expect(screen.getAllByText('ROOM42').length).toBeGreaterThan(0);
@@ -64,28 +68,7 @@ describe('Lobby Screen', () => {
   });
 
   it('allows host to change deck configuration with CHANGE button and remove player', () => {
-    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
-      connection: 'CONNECTED',
-      room: mockRoom,
-      game: undefined,
-      challenge: undefined,
-      lastEvent: undefined,
-      error: undefined,
-      removedNotice: undefined,
-      submitting: false,
-      create: vi.fn(),
-      join: vi.fn(),
-      configure: mockConfigure,
-      start: mockStart,
-      play: vi.fn(),
-      skip: vi.fn(),
-      callBluff: vi.fn(),
-      removePlayer: mockRemovePlayer,
-      resetSession: vi.fn(),
-      clearChallenge: vi.fn(),
-      clearError: vi.fn(),
-      clearRemovedNotice: vi.fn(),
-    });
+    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue(baseMock);
 
     render(<Lobby />);
     const changeBtn = screen.getByRole('button', { name: /CHANGE/i });
@@ -98,32 +81,11 @@ describe('Lobby Screen', () => {
   });
 
   it('disables deck configuration and start/remove button for non-host players', () => {
-    const nonHostRoom: RoomView = {
-      ...mockRoom,
-      selfPlayerId: 'p2',
-    };
+    const nonHostRoom: RoomView = { ...mockRoom, selfPlayerId: 'p2' };
 
     vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
-      connection: 'CONNECTED',
+      ...baseMock,
       room: nonHostRoom,
-      game: undefined,
-      challenge: undefined,
-      lastEvent: undefined,
-      error: undefined,
-      removedNotice: undefined,
-      submitting: false,
-      create: vi.fn(),
-      join: vi.fn(),
-      configure: mockConfigure,
-      start: mockStart,
-      play: vi.fn(),
-      skip: vi.fn(),
-      callBluff: vi.fn(),
-      removePlayer: mockRemovePlayer,
-      resetSession: vi.fn(),
-      clearChallenge: vi.fn(),
-      clearError: vi.fn(),
-      clearRemovedNotice: vi.fn(),
     });
 
     render(<Lobby />);

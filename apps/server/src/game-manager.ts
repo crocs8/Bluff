@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
 import { applyAction, createGame, getPlayerView, nextActivePlayerId, type DomainEvent, type GameAction, type GameState, type RandomSource } from '@bluff/game-engine';
-import type { DeckCount } from '@bluff/shared';
+import { type DeckCount, type QuickChatMessageId, QUICK_CHAT_IDS } from '@bluff/shared';
 
 import type { GameViewEnvelope, RoomView } from './contracts.js';
 
@@ -49,7 +49,7 @@ export class GameManager {
     this.now = options.now ?? Date.now;
     this.schedule = options.setTimeout ?? setTimeout;
     this.cancel = options.clearTimeout ?? clearTimeout;
-    this.turnDurationMs = options.turnDurationMs ?? 45_000;
+    this.turnDurationMs = options.turnDurationMs ?? 30_000;
     this.onTimeout = options.onTimeout;
   }
 
@@ -285,6 +285,14 @@ export class GameManager {
 
   connectedPlayers(room: RoomSession): SessionPlayer[] { return [...room.players.values()].filter((player) => player.socketId !== undefined); }
   getRoomForPlayer(playerId: string): RoomSession | undefined { const roomId = this.playerRoomIds.get(playerId); return roomId ? this.rooms.get(roomId) : undefined; }
+
+  sendQuickChat(playerId: string, messageId: string): { room: RoomSession; messageId: QuickChatMessageId } {
+    const room = this.requirePlayerRoom(playerId);
+    if (!QUICK_CHAT_IDS.includes(messageId as QuickChatMessageId)) {
+      throw new ManagerError('INVALID_ACTION', 'Invalid quick chat message.');
+    }
+    return { room, messageId: messageId as QuickChatMessageId };
+  }
 
   dispose(): void {
     for (const room of this.rooms.values()) this.cancelTurn(room);

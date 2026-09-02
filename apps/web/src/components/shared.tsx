@@ -265,10 +265,11 @@ export function PlayerChip({
 
   return (
     <div className="flex flex-col items-center text-center select-none relative group">
-      {/* Quick Chat speech bubble anchor (prepared for Phase 2) */}
+      {/* Quick Chat speech bubble */}
       {chatMessage && (
-        <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-black/90 border border-[#f5c451] text-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap z-30 shadow-lg animate-bounce">
-          💬 {chatMessage}
+        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white text-zinc-950 font-black text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-xl whitespace-nowrap z-40 shadow-[0_4px_14px_rgba(0,0,0,0.75)] pointer-events-none transition-all duration-200 animate-fade-in flex items-center justify-center">
+          <span>{chatMessage}</span>
+          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-0 border-x-[4px] border-x-transparent border-t-[4px] border-t-white" />
         </div>
       )}
 
@@ -330,7 +331,7 @@ export function PlayerChip({
 // ── Circular Turn Timer Component ─────────────────
 export function TurnTimer({
   secondsLeft,
-  totalSeconds = 45,
+  totalSeconds = 30,
   isMyTurn = false,
 }: {
   secondsLeft: number;

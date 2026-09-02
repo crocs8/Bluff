@@ -4,20 +4,20 @@ import { GameManager } from './game-manager.js';
 
 const alwaysZero = { nextInt: () => 0 };
 
-describe('GameManager turn deadlines and player management', () => {
+describe('GameManager turn deadlines, quick chat, and player management', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('creates a deadline and advances an unstarted round once on first-turn expiry', () => {
+  it('creates a 30-second deadline and advances an unstarted round once on first-turn expiry', () => {
     vi.useFakeTimers();
     const manager = new GameManager(alwaysZero);
     const created = manager.createRoom('Ada', 'socket-a');
     const joined = manager.joinRoom(created.room.roomId, 'Ben', 'socket-b');
     const room = manager.startRoom(created.player.id);
 
-    expect(room.turnDeadlineAt).toBe(Date.now() + 45_000);
-    vi.advanceTimersByTime(45_000);
+    expect(room.turnDeadlineAt).toBe(Date.now() + 30_000);
+    vi.advanceTimersByTime(30_000);
 
     expect(room.revision).toBe(3);
     expect(room.game?.currentPlayerId).toBe(joined.player.id);
@@ -25,7 +25,7 @@ describe('GameManager turn deadlines and player management', () => {
     manager.dispose();
   });
 
-  it('invalidates the old timer after a manual action', () => {
+  it('invalidates the old timer after a manual action and sets new 30-second deadline', () => {
     vi.useFakeTimers();
     const manager = new GameManager(alwaysZero);
     const created = manager.createRoom('Ada', 'socket-a');
@@ -37,8 +37,30 @@ describe('GameManager turn deadlines and player management', () => {
     expect(room.revision).toBe(3);
     expect(room.game?.currentPlayerId).not.toBe(created.player.id);
 
-    vi.advanceTimersByTime(45_000);
+    vi.advanceTimersByTime(30_000);
     expect(room.revision).toBe(4);
+    manager.dispose();
+  });
+
+  it('validates and sends quick chat messages without modifying game state', () => {
+    const manager = new GameManager(alwaysZero);
+    const created = manager.createRoom('Ada', 'socket-a');
+    manager.joinRoom(created.room.roomId, 'Ben', 'socket-b');
+    const room = manager.startRoom(created.player.id);
+    const initialRev = room.revision;
+
+    // Valid quick chat message
+    const res = manager.sendQuickChat(created.player.id, 'PAKADO');
+    expect(res.messageId).toBe('PAKADO');
+    expect(res.room.roomId).toBe(room.roomId);
+    expect(room.revision).toBe(initialRev); // Game state not mutated
+
+    // Invalid quick chat message rejected
+    expect(() => manager.sendQuickChat(created.player.id, 'INVALID_CHAT_ID')).toThrowError('Invalid quick chat message.');
+
+    // Unknown player cannot send
+    expect(() => manager.sendQuickChat('non-existent-player', 'PAKADO')).toThrowError('Player has no active room session.');
+
     manager.dispose();
   });
 

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ActionDock } from './ActionDock.js';
 import * as SocketProviderModule from '../socket-provider.js';
 import type { GameViewEnvelope, RoomView } from '../types.js';
+import { QUICK_CHAT_IDS, QUICK_CHAT_MESSAGES } from '@bluff/shared';
 
 vi.mock('../socket-provider.js', () => ({
   useBluffSocket: vi.fn(),
@@ -12,6 +13,7 @@ describe('ActionDock Component', () => {
   const mockPlay = vi.fn();
   const mockSkip = vi.fn();
   const mockCallBluff = vi.fn();
+  const mockSendQuickChat = vi.fn();
 
   const mockRoom: RoomView = {
     roomId: 'ROOM1',
@@ -25,6 +27,7 @@ describe('ActionDock Component', () => {
 
   const mockGame: GameViewEnvelope = {
     revision: 1,
+    turnDeadlineAt: Date.now() + 30_000,
     game: {
       roomId: 'ROOM1',
       phase: 'PLAYING',
@@ -63,6 +66,7 @@ describe('ActionDock Component', () => {
     error: undefined,
     removedNotice: undefined,
     submitting: false,
+    chatMessages: {},
     create: vi.fn(),
     join: vi.fn(),
     configure: vi.fn(),
@@ -72,20 +76,60 @@ describe('ActionDock Component', () => {
     callBluff: mockCallBluff,
     removePlayer: vi.fn(),
     resetSession: vi.fn(),
+    sendQuickChat: mockSendQuickChat,
     clearChallenge: vi.fn(),
     clearError: vi.fn(),
     clearRemovedNotice: vi.fn(),
   };
 
-  it('renders cards in hand, sort button, and action buttons', () => {
+  it('renders cards in hand, sort button, quick chat button, and action buttons', () => {
     vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue(baseMock);
 
     render(<ActionDock />);
     expect(screen.getAllByRole('button', { name: /K of/i }).length).toBe(2);
     expect(screen.getByRole('button', { name: /SORT/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Quick Chat/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /CALL BLUFF/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /SKIP/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /PLAY/i })).toBeInTheDocument();
+  });
+
+  it('opens quick chat menu with all 12 presets and sends message upon selection', () => {
+    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue(baseMock);
+
+    render(<ActionDock />);
+
+    // Click 💬 button
+    const chatBtn = screen.getByRole('button', { name: /Quick Chat/i });
+    fireEvent.click(chatBtn);
+
+    // Verify exactly 12 presets are displayed with correct strings
+    expect(QUICK_CHAT_IDS).toHaveLength(12);
+    for (const id of QUICK_CHAT_IDS) {
+      expect(screen.getByRole('button', { name: QUICK_CHAT_MESSAGES[id] })).toBeInTheDocument();
+    }
+
+    // Select '🧢 Pakado'
+    const pakadoBtn = screen.getByRole('button', { name: '🧢 Pakado' });
+    fireEvent.click(pakadoBtn);
+
+    expect(mockSendQuickChat).toHaveBeenCalledWith('PAKADO');
+
+    // Menu should close automatically
+    expect(screen.queryByRole('button', { name: '🧢 Pakado' })).not.toBeInTheDocument();
+  });
+
+  it('allows closing the quick chat menu using the close button', () => {
+    vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue(baseMock);
+
+    render(<ActionDock />);
+    const chatBtn = screen.getByRole('button', { name: /Quick Chat/i });
+    fireEvent.click(chatBtn);
+
+    const closeBtn = screen.getByRole('button', { name: /Close chat menu/i });
+    fireEvent.click(closeBtn);
+
+    expect(screen.queryByRole('button', { name: '🧢 Pakado' })).not.toBeInTheDocument();
   });
 
   it('allows selecting card and claimed rank directly from rank strip to play', () => {

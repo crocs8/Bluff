@@ -173,4 +173,29 @@ describe('real-time room and game synchronization', () => {
     expect(await emitAck(resumed, 'session:resume', { playerId })).toMatchObject({ ok: true, roomId: room.roomId });
     expect((await resumedView).revision).toBe(3);
   });
+
+  it('broadcasts quick-chat:message to all room participants and rejects invalid message IDs', async () => {
+    const a = await connect();
+    const b = await connect();
+    const room = await createRoom(a, 'Ada');
+    await emitAck(b, 'room:join', { roomId: room.roomId!, username: 'Ben' });
+
+    const chatPromiseA = once<{ playerId: string; messageId: string }>(a, 'quick-chat:message');
+    const chatPromiseB = once<{ playerId: string; messageId: string }>(b, 'quick-chat:message');
+
+    // Ada sends valid quick chat
+    const sendAck = await emitAck(a, 'quick-chat:send', { messageId: 'PAKADO' });
+    expect(sendAck.ok).toBe(true);
+
+    const receivedA = await chatPromiseA;
+    const receivedB = await chatPromiseB;
+
+    expect(receivedA).toEqual({ playerId: room.playerId, messageId: 'PAKADO' });
+    expect(receivedB).toEqual({ playerId: room.playerId, messageId: 'PAKADO' });
+
+    // Invalid message ID is rejected
+    const invalidAck = await emitAck(a, 'quick-chat:send', { messageId: 'INVALID_ID' });
+    expect(invalidAck.ok).toBe(false);
+    expect(invalidAck.code).toBe('INVALID_ACTION');
+  });
 });

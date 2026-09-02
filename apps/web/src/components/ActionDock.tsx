@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { RANKS, type Card, type Rank } from '@bluff/shared';
+import { useEffect, useRef, useState } from 'react';
+import { QUICK_CHAT_IDS, QUICK_CHAT_MESSAGES, RANKS, type Card, type Rank } from '@bluff/shared';
 import { CardView, TurnTimer } from './shared.js';
 import { useBluffSocket } from '../socket-provider.js';
 
@@ -20,11 +20,13 @@ const RANK_ORDER: Record<Rank, number> = {
 };
 
 export function ActionDock() {
-  const { game, room, play, skip, callBluff, submitting, error, clearError } = useBluffSocket();
+  const { game, room, play, skip, callBluff, submitting, error, clearError, sendQuickChat } = useBluffSocket();
   const [selected, setSelected] = useState<string[]>([]);
   const [claimedRank, setClaimedRank] = useState<Rank>('A');
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [orderedCardIds, setOrderedCardIds] = useState<string[]>([]);
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const chatMenuRef = useRef<HTMLDivElement>(null);
 
   const deadline = game?.turnDeadlineAt;
   useEffect(() => {
@@ -37,6 +39,18 @@ export function ActionDock() {
     const interval = window.setInterval(update, 1000);
     return () => window.clearInterval(interval);
   }, [deadline]);
+
+  // Close quick chat menu on outside click
+  useEffect(() => {
+    if (!showChatMenu) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (chatMenuRef.current && !chatMenuRef.current.contains(e.target as Node)) {
+        setShowChatMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showChatMenu]);
 
   if (!game || !room) return null;
 
@@ -122,7 +136,7 @@ export function ActionDock() {
   const renderedCards = displayCards.length === hand.length ? displayCards : hand;
 
   return (
-    <section className="w-full shrink-0 select-none z-20 flex flex-col justify-end">
+    <section className="w-full shrink-0 select-none z-20 flex flex-col justify-end relative">
       {/* Error banner if action fails */}
       {error && (
         <div className="px-3 pb-1 max-w-md mx-auto w-full">
@@ -138,6 +152,51 @@ export function ActionDock() {
             >
               ✕
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Quick Chat Preset Picker Menu ─────────────── */}
+      {showChatMenu && (
+        <div className="px-3 pb-2 max-w-sm sm:max-w-md mx-auto w-full z-50">
+          <div
+            ref={chatMenuRef}
+            className="bg-[#0b1410]/95 border-2 border-[#d4af37] rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_30px_rgba(0,0,0,0.9),0_0_18px_rgba(212,175,55,0.3)] animate-fade-in backdrop-blur-md"
+          >
+            <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-[#a87e2b]/40 px-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">💬</span>
+                <span className="gold-text font-black text-[11px] sm:text-xs uppercase tracking-wider">
+                  QUICK CHAT
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowChatMenu(false)}
+                className="text-zinc-400 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded active:scale-95"
+                title="Close chat menu"
+                aria-label="Close chat menu"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 2-Column Preset Grid */}
+            <div className="grid grid-cols-2 gap-1.5">
+              {QUICK_CHAT_IDS.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    sendQuickChat(id);
+                    setShowChatMenu(false);
+                  }}
+                  className="bg-[#14231b] hover:bg-[#1f372a] active:scale-95 border border-[#a87e2b]/50 hover:border-[#f5c451] text-zinc-100 hover:text-white rounded-xl py-2 px-2.5 text-left text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm truncate"
+                >
+                  <span className="truncate">{QUICK_CHAT_MESSAGES[id]}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -213,11 +272,11 @@ export function ActionDock() {
 
       {/* ── Action Controls & Timer Bar ─────────────── */}
       <div className="max-w-md mx-auto w-full px-3 pb-2 safe-bottom">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Circular Turn Timer */}
           <TurnTimer
             secondsLeft={secondsLeft}
-            totalSeconds={45}
+            totalSeconds={30}
             isMyTurn={isMyTurn}
           />
 
@@ -265,6 +324,22 @@ export function ActionDock() {
               <span>CALL BLUFF</span>
             </button>
           </div>
+
+          {/* Quick Chat Button 💬 */}
+          <button
+            type="button"
+            onClick={() => setShowChatMenu((prev) => !prev)}
+            className={[
+              'size-11 sm:size-12 shrink-0 rounded-2xl border flex items-center justify-center text-base sm:text-lg shadow-md transition-all active:scale-95',
+              showChatMenu
+                ? 'bg-amber-950 border-[#f5c451] shadow-[0_0_12px_rgba(245,196,81,0.5)] scale-105'
+                : 'bg-black/70 border-[#a87e2b]/80 hover:border-[#f5c451] hover:bg-black/90 text-[#f5c451]',
+            ].join(' ')}
+            title="Quick Chat"
+            aria-label="Quick Chat"
+          >
+            💬
+          </button>
         </div>
       </div>
     </section>

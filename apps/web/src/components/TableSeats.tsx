@@ -7,12 +7,14 @@ interface TableSeatsProps {
   opponents: OpponentPlayer[];
   currentPlayerId?: string | undefined;
   hostPlayerId?: string | undefined;
+  chatMessages?: Record<string, string | undefined> | undefined;
 }
 
 export function TableSeats({
   opponents,
   currentPlayerId,
   hostPlayerId,
+  chatMessages,
 }: TableSeatsProps) {
   return (
     <div className="absolute inset-0 pointer-events-none">
@@ -35,6 +37,7 @@ export function TableSeats({
               rank={player.rank}
               active={currentPlayerId === player.id}
               isHost={player.id === hostPlayerId}
+              chatMessage={chatMessages?.[player.id]}
             />
           </div>
         );

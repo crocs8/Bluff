@@ -106,6 +106,13 @@ export function createBluffServer(options: { random?: RandomSource; now?: () => 
     socket.on('game:skip', (_payload, ack) => handleGameAction(socket, ack, { type: 'SKIP' }, io, manager));
     socket.on('game:call-bluff', (_payload, ack) => handleGameAction(socket, ack, { type: 'CALL_BLUFF' }, io, manager));
 
+    socket.on('quick-chat:send', (payload, ack) => execute(socket, ack, () => {
+      const playerId = requirePlayerId(socket);
+      const { room, messageId } = manager.sendQuickChat(playerId, payload.messageId);
+      io.to(room.roomId).emit('quick-chat:message', { playerId, messageId });
+      return { revision: room.revision };
+    }));
+
     socket.on('disconnect', () => {
       const disconnected = manager.disconnectSocket(socket.id);
       if (disconnected) io.to(disconnected.room.roomId).emit('connection:status', { playerId: disconnected.playerId, status: 'DISCONNECTED' });
