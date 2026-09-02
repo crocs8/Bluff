@@ -77,11 +77,10 @@ describe('ActionDock Component', () => {
     clearRemovedNotice: vi.fn(),
   };
 
-  it('renders cards in hand, rank strip, and action buttons', () => {
+  it('renders cards in hand and action buttons', () => {
     vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue(baseMock);
 
     render(<ActionDock />);
-    expect(screen.getByText(/Select 1 - 4 cards/i)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /K of/i }).length).toBe(2);
     expect(screen.getByRole('button', { name: /CALL BLUFF/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /SKIP/i })).toBeInTheDocument();

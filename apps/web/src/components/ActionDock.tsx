@@ -1,20 +1,36 @@
 import { useEffect, useState } from 'react';
 import { RANKS, type Rank } from '@bluff/shared';
-import { CardView } from './shared.js';
+import { CardView, TurnTimer } from './shared.js';
 import { useBluffSocket } from '../socket-provider.js';
 
 export function ActionDock() {
   const { game, room, play, skip, callBluff, submitting, error, clearError } = useBluffSocket();
   const [selected, setSelected] = useState<string[]>([]);
   const [claimedRank, setClaimedRank] = useState<Rank>('A');
+  const [secondsLeft, setSecondsLeft] = useState(0);
+
+  const deadline = game?.turnDeadlineAt;
+  useEffect(() => {
+    if (deadline === undefined) {
+      setSecondsLeft(0);
+      return;
+    }
+    const update = () => setSecondsLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    update();
+    const interval = window.setInterval(update, 1000);
+    return () => window.clearInterval(interval);
+  }, [deadline]);
 
   if (!game || !room) return null;
 
   const { legalActions, hand, roundNumber, roundLockedRank } = game.game;
-  useEffect(() => {
-    setClaimedRank(roundLockedRank ?? 'A');
-  }, [roundNumber, roundLockedRank]);
   const isMyTurn = legalActions.canPlay || legalActions.canSkip || legalActions.canCallBluff;
+
+  useEffect(() => {
+    if (roundLockedRank) {
+      setClaimedRank(roundLockedRank);
+    }
+  }, [roundNumber, roundLockedRank]);
 
   function toggleCard(id: string) {
     if (!legalActions.canPlay) return;
@@ -45,25 +61,38 @@ export function ActionDock() {
     setSelected([]);
   }
 
-  // Calculate slight fan rotation for cards
+  // Calculate dynamic overlap for fanned hand so cards never overflow screen
   const totalCards = hand.length;
-  const getRotation = (index: number) => {
+  const getFanRotation = (index: number) => {
     if (totalCards <= 1) return 0;
     const mid = (totalCards - 1) / 2;
-    return (index - mid) * 2.5;
+    return (index - mid) * Math.min(2.5, 20 / totalCards);
   };
 
+  // Overlap spacing calculation
+  const overlapMarginClass =
+    totalCards > 12
+      ? '-ml-8 sm:-ml-9'
+      : totalCards > 8
+        ? '-ml-6 sm:-ml-7'
+        : totalCards > 5
+          ? '-ml-4 sm:-ml-5'
+          : totalCards > 2
+            ? '-ml-2 sm:-ml-3'
+            : 'ml-1';
+
   return (
-    <section className="w-full shrink-0 select-none z-20">
+    <section className="w-full shrink-0 select-none z-20 flex flex-col justify-end">
       {/* Error banner if action fails */}
       {error && (
-        <div className="px-4 pb-2">
-          <div className="rounded-xl bg-red-950/90 border border-red-700/80 p-2.5 flex items-center justify-between text-xs text-red-200">
+        <div className="px-3 pb-1 max-w-md mx-auto w-full">
+          <div className="rounded-xl bg-red-950/95 border border-red-700/80 p-2 flex items-center justify-between text-xs text-red-200 shadow-lg">
             <div className="flex items-center gap-2">
-              <span className="text-red-400 font-bold">⚠</span>
+              <span className="text-red-400 font-bold text-sm">⚠</span>
               <span>{error}</span>
             </div>
             <button
+              type="button"
               onClick={clearError}
               className="text-zinc-400 hover:text-white px-2 py-0.5 rounded"
             >
@@ -73,112 +102,110 @@ export function ActionDock() {
         </div>
       )}
 
-      {/* ── Cards in Hand Area ───────────────────────── */}
-      <div className="relative pt-4 pb-2 overflow-x-auto no-scrollbar">
-        <div className="flex justify-center items-end px-4 min-w-max -space-x-4">
-          {hand.length === 0 ? (
-            <div className="py-8 text-center text-zinc-500 text-sm font-medium">
-              No cards in hand
-            </div>
-          ) : (
-            hand.map((card, idx) => (
-              <CardView
+      {/* ── Player's Fanned Hand ──────────────────────── */}
+      <div className="relative pt-3 pb-1 w-full max-w-xl mx-auto overflow-x-hidden flex justify-center items-end px-2">
+        {hand.length === 0 ? (
+          <div className="py-4 text-center text-zinc-500 text-xs font-semibold">
+            No cards in hand
+          </div>
+        ) : (
+          <div className="flex items-end justify-center py-2 px-1">
+            {hand.map((card, idx) => (
+              <div
                 key={card.id}
-                card={card}
-                selected={selected.includes(card.id)}
-                onClick={() => toggleCard(card.id)}
-                disabled={!legalActions.canPlay}
-                rotation={getRotation(idx)}
-                size="md"
-              />
-            ))
-          )}
-        </div>
+                className={idx > 0 ? overlapMarginClass : ''}
+                style={{ zIndex: idx + 1 }}
+              >
+                <CardView
+                  card={card}
+                  selected={selected.includes(card.id)}
+                  onClick={() => toggleCard(card.id)}
+                  disabled={!legalActions.canPlay}
+                  rotation={getFanRotation(idx)}
+                  size="md"
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* ── Subtitle / Selection prompt ────────────── */}
-      <p className="text-center text-[11px] text-zinc-400 font-medium tracking-wide mb-1.5">
-        Select 1 - {legalActions.maxPlayCards} cards
-      </p>
+      {/* ── Unlocked Rank Selector Strip (Only shown when choosing first rank) ── */}
+      {roundLockedRank === undefined && legalActions.canPlay && (
+        <div className="px-3 max-w-md mx-auto w-full mb-1">
+          <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar py-0.5">
+            {RANKS.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setClaimedRank(r)}
+                className={[
+                  'rank-strip-btn min-w-[1.5rem] h-7 rounded text-[11px] font-bold shrink-0 transition-transform active:scale-95',
+                  claimedRank === r ? 'active' : '',
+                ].join(' ')}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* ── Horizontal Rank Selector Strip (A, 2, ..., K) ── */}
-      <div className="px-3 mb-3">
-        <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar py-1">
-          {RANKS.map((r) => (
+      {/* ── Action Controls & Timer Bar ─────────────── */}
+      <div className="max-w-md mx-auto w-full px-3 pb-2 safe-bottom">
+        <div className="flex items-center gap-2">
+          {/* Circular Turn Timer */}
+          <TurnTimer
+            secondsLeft={secondsLeft}
+            totalSeconds={45}
+            isMyTurn={isMyTurn}
+          />
+
+          {/* Action Buttons Grid */}
+          <div className="grid grid-cols-3 gap-1.5 flex-1">
+            {/* SKIP */}
             <button
-              key={r}
               type="button"
-              onClick={() => setClaimedRank(r)}
-              disabled={roundLockedRank !== undefined}
+              disabled={!legalActions.canSkip || submitting}
+              onClick={handleSkip}
               className={[
-                'rank-strip-btn min-w-[1.65rem] h-8 rounded text-xs font-bold shrink-0 transition-transform active:scale-95',
-                claimedRank === r ? 'active' : '',
-                roundLockedRank !== undefined ? 'opacity-70 cursor-not-allowed' : '',
+                'btn-skip rounded-xl py-3 px-1.5 flex items-center justify-center gap-1 font-bold text-xs sm:text-sm tracking-wider uppercase transition-all',
+                !legalActions.canSkip || submitting ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer active:scale-95',
               ].join(' ')}
             >
-              {r}
+              <span>SKIP</span>
+              <span className="text-xs font-black">&gt;&gt;</span>
             </button>
-          ))}
+
+            {/* PLAY */}
+            <button
+              type="button"
+              disabled={!legalActions.canPlay || selected.length === 0 || submitting}
+              onClick={handlePlay}
+              className={[
+                'btn-play rounded-xl py-3 px-1.5 flex items-center justify-center gap-1 font-black text-xs sm:text-sm tracking-wider uppercase transition-all',
+                !legalActions.canPlay || selected.length === 0 || submitting ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer active:scale-95',
+              ].join(' ')}
+            >
+              <span>PLAY</span>
+              {selected.length > 0 && <span className="text-[11px] font-normal">({selected.length})</span>}
+            </button>
+
+            {/* CALL BLUFF */}
+            <button
+              type="button"
+              disabled={!legalActions.canCallBluff || submitting}
+              onClick={handleCallBluff}
+              className={[
+                'btn-bluff rounded-xl py-3 px-1.5 flex items-center justify-center gap-1 font-black text-xs sm:text-sm tracking-wider uppercase transition-all',
+                !legalActions.canCallBluff || submitting ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer active:scale-95',
+              ].join(' ')}
+            >
+              <span className="text-xs">⚠</span>
+              <span>CALL BLUFF</span>
+            </button>
+          </div>
         </div>
-      </div>
-
-      {/* ── 3 Action Buttons Bar ───────────────────── */}
-      <div className="grid grid-cols-3 gap-2 px-3 mb-2">
-        {/* CALL BLUFF */}
-        <button
-          type="button"
-          disabled={!legalActions.canCallBluff || submitting}
-          onClick={handleCallBluff}
-          className={[
-            'btn-bluff rounded-xl py-3 px-2 flex items-center justify-center gap-1.5 font-black text-xs sm:text-sm tracking-wider uppercase transition-opacity',
-            !legalActions.canCallBluff || submitting ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer',
-          ].join(' ')}
-        >
-          <span className="text-sm">⚠</span>
-          <span>CALL BLUFF</span>
-        </button>
-
-        {/* SKIP */}
-        <button
-          type="button"
-          disabled={!legalActions.canSkip || submitting}
-          onClick={handleSkip}
-          className={[
-            'btn-skip rounded-xl py-3 px-2 flex items-center justify-center gap-1 font-bold text-xs sm:text-sm tracking-wider uppercase transition-opacity',
-            !legalActions.canSkip || submitting ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer',
-          ].join(' ')}
-        >
-          <span>SKIP</span>
-          <span className="text-xs tracking-tighter font-extrabold">&gt;&gt;</span>
-        </button>
-
-        {/* PLAY */}
-        <button
-          type="button"
-          disabled={!legalActions.canPlay || selected.length === 0 || submitting}
-          onClick={handlePlay}
-          className={[
-            'btn-play rounded-xl py-3 px-2 flex items-center justify-center gap-1 font-black text-xs sm:text-sm tracking-wider uppercase transition-opacity',
-            !legalActions.canPlay || selected.length === 0 || submitting ? 'opacity-35 cursor-not-allowed' : 'cursor-pointer',
-          ].join(' ')}
-        >
-          <span>PLAY</span>
-          <span className="text-xs">▶</span>
-          {selected.length > 0 && <span className="text-xs font-normal">({selected.length})</span>}
-        </button>
-      </div>
-
-      {/* ── Bottom Utility Bar (Chat / Game # / Audio) ── */}
-      <div className="flex items-center justify-between px-4 py-1 text-zinc-500 text-xs safe-bottom">
-        <button type="button" className="p-1 rounded hover:text-zinc-300 active:scale-95" title="Chat">
-          💬
-        </button>
-        <span className="font-semibold text-[11px] text-zinc-400 tracking-wider">
-          {roundLockedRank ? `ROUND RANK: ${roundLockedRank}` : `Game #${roundNumber}`}
-        </span>
-        <button type="button" className="p-1 rounded hover:text-zinc-300 active:scale-95" title="Audio">
-          🔊
-        </button>
       </div>
     </section>
   );

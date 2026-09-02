@@ -1,6 +1,6 @@
 import { render, screen, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ChallengeOverlay } from './ChallengeOverlay.js';
+import { TableCenter } from './TableCenter.js';
 import * as SocketProviderModule from '../socket-provider.js';
 import type { ChallengeResult, GameViewEnvelope, RoomView } from '../types.js';
 
@@ -8,7 +8,7 @@ vi.mock('../socket-provider.js', () => ({
   useBluffSocket: vi.fn(),
 }));
 
-describe('ChallengeOverlay Component', () => {
+describe('In-Table Challenge & Bluff Reveal', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -67,7 +67,8 @@ describe('ChallengeOverlay Component', () => {
     revision: 5,
   };
 
-  it('renders animation stages and reveals BLUFF CAUGHT result with cards and correct recipient', () => {
+  it('renders in-table announcement and reveals BLUFF CAUGHT result directly on table', () => {
+    const mockClearChallenge = vi.fn();
     vi.mocked(SocketProviderModule.useBluffSocket).mockReturnValue({
       connection: 'CONNECTED',
       room: mockRoom,
@@ -86,28 +87,27 @@ describe('ChallengeOverlay Component', () => {
       callBluff: vi.fn(),
       removePlayer: vi.fn(),
       resetSession: vi.fn(),
-      clearChallenge: vi.fn(),
+      clearChallenge: mockClearChallenge,
       clearError: vi.fn(),
       clearRemovedNotice: vi.fn(),
     });
 
-    render(<ChallengeOverlay />);
+    render(<TableCenter />);
 
-    // Initial phase: ⚡ CHALLENGE!
-    expect(screen.getByText(/CHALLENGE!/i)).toBeInTheDocument();
+    // Initial announcement on table
+    expect(screen.getByText(/Alice called BLUFF!/i)).toBeInTheDocument();
 
-    // Advance to revealing
+    // Advance timers for flip and result
     act(() => {
-      vi.advanceTimersByTime(1100);
+      vi.advanceTimersByTime(300);
     });
-    expect(screen.getByText(/REVEALING/i)).toBeInTheDocument();
+    expect(screen.getByText(/RESULT: CLAIM WAS FALSE/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bob takes the pile/i)).toBeInTheDocument();
 
-    // Advance to result
+    // Auto-dismiss after 4 seconds
     act(() => {
-      vi.advanceTimersByTime(1300);
+      vi.advanceTimersByTime(4000);
     });
-    expect(screen.getByText('BLUFF CAUGHT!')).toBeInTheDocument();
-    expect(screen.getByText(/takes the pile/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /CLOSE/i })).toBeInTheDocument();
+    expect(mockClearChallenge).toHaveBeenCalled();
   });
 });

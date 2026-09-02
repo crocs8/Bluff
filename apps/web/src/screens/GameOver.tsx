@@ -1,111 +1,135 @@
 import { useBluffSocket } from '../socket-provider.js';
 
-function getOrdinal(n: number): string {
-  if (n === 1) return '1st';
-  if (n === 2) return '2nd';
-  if (n === 3) return '3rd';
-  return `${n}th`;
-}
-
 export function GameOver() {
   const { game, room, resetSession } = useBluffSocket();
+
   if (!game || !room) return null;
 
-  const { players, rankings } = game.game;
+  const state = game.game;
+  const winnerId = state.rankings[0];
+  const winner = state.players.find((p) => p.id === winnerId);
+  const isWinnerMe = winnerId === room.selfPlayerId;
 
-  // Build ordered list: ranked players in order
-  const orderedPlayers = rankings.map((id, index) => {
-    const player = players.find((p) => p.id === id);
-    const rank = index + 1;
-    const isLoser = rankings.length > 1 && index === rankings.length - 1;
-    return { id, username: player?.username ?? id, rank, isLoser };
-  });
-
-  const loser = orderedPlayers.find((p) => p.isLoser);
-
-  const getRankBadge = (rank: number, isLoser: boolean) => {
-    if (isLoser) return '💀';
-    if (rank === 1) return '🥇';
-    if (rank === 2) return '🥈';
-    if (rank === 3) return '🥉';
-    return `#${rank}`;
-  };
+  // Identify last place (final loser)
+  const lastPlayerId = state.rankings[state.rankings.length - 1];
+  const lastPlayer = state.players.find((p) => p.id === lastPlayerId);
 
   return (
-    <main className="felt-bg mx-auto flex flex-col justify-between min-h-dvh max-w-md p-5 safe-top safe-bottom select-none">
-      {/* ── Title ─────────────────────────────────── */}
-      <div className="text-center pt-4">
-        <h1 className="gold-gradient-text text-4xl font-black tracking-wider uppercase drop-shadow-[0_0_25px_rgba(245,196,81,0.4)]">
-          GAME OVER
+    <main className="felt-bg min-h-dvh flex flex-col justify-between p-4 sm:p-6 max-w-md sm:max-w-lg mx-auto safe-top safe-bottom safe-left safe-right select-none">
+      {/* ── Top Trophy & Winner Header ──────────────── */}
+      <header className="text-center pt-2 sm:pt-4">
+        <div className="text-4xl sm:text-5xl animate-bounce mb-2">🏆</div>
+        <h1 className="text-2xl sm:text-3xl font-black gold-gradient-text tracking-wider uppercase">
+          {isWinnerMe ? 'YOU WIN!' : `${winner?.username ?? 'PLAYER'} WINS!`}
         </h1>
-        <p className="text-zinc-400 text-xs tracking-wider uppercase mt-1 font-semibold">
+        <p className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mt-1">
+          GAME OVER
+        </p>
+        <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider">
           Final Rankings
         </p>
-      </div>
+      </header>
 
-      {/* ── Rankings Card ─────────────────────────── */}
-      <section className="gold-panel w-full rounded-3xl p-5 my-4 space-y-2.5 overflow-y-auto max-h-[60vh]">
-        {orderedPlayers
-          .filter((entry) => !entry.isLoser)
-          .map((entry) => {
-            const isMe = entry.id === room.selfPlayerId;
-            return (
-              <div
-                key={entry.id}
-                className={[
-                  'flex items-center justify-between p-3 rounded-xl border transition-all',
-                  isMe
-                    ? 'bg-black/70 border-[#f5c451]/60 shadow-[0_0_12px_rgba(245,196,81,0.2)]'
-                    : 'bg-black/40 border-zinc-800/80',
-                ].join(' ')}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-xl font-bold min-w-[2rem]">
-                    {getRankBadge(entry.rank, false)}
-                  </span>
-                  <div>
-                    <span className="font-bold text-sm text-zinc-100 block">
-                      {entry.username} {isMe ? '(You)' : ''}
-                    </span>
-                    <span className="text-[10px] text-zinc-400">
-                      {entry.rank === 1 ? '1st Place · Winner!' : `${getOrdinal(entry.rank)} Place`}
-                    </span>
-                  </div>
+      {/* ── Rankings List Card ──────────────────────── */}
+      <section className="gold-panel rounded-3xl p-4 sm:p-5 my-3 flex-1 overflow-y-auto no-scrollbar space-y-2">
+        {state.rankings.map((pid, idx) => {
+          const p = state.players.find((player) => player.id === pid);
+          if (!p) return null;
+          const isMe = p.id === room.selfPlayerId;
+          const isWinner = idx === 0;
+          const isLoser = idx === state.rankings.length - 1 && state.rankings.length > 1;
+
+          return (
+            <div
+              key={p.id}
+              className={[
+                'flex items-center justify-between p-3 rounded-2xl border transition-all',
+                isWinner
+                  ? 'bg-amber-950/70 border-[#f5c451] shadow-[0_0_15px_rgba(245,196,81,0.25)]'
+                  : isLoser
+                    ? 'bg-red-950/40 border-red-800/60'
+                    : 'bg-black/40 border-zinc-800',
+              ].join(' ')}
+            >
+              <div className="flex items-center gap-3">
+                {/* Rank Badge */}
+                <div
+                  className={`size-8 rounded-full grid place-items-center font-black text-xs ${
+                    isWinner
+                      ? 'bg-[#c6952e] text-black shadow-md'
+                      : idx === 1
+                        ? 'bg-zinc-400 text-black'
+                        : idx === 2
+                          ? 'bg-amber-700 text-white'
+                          : 'bg-zinc-800 text-zinc-300'
+                  }`}
+                >
+                  {isWinner ? '👑' : `${idx + 1}`}
+                </div>
+
+                {/* Player Avatar & Name */}
+                <div>
+                  <p className="font-bold text-xs sm:text-sm text-zinc-100">
+                    {p.username} {isMe ? '(You)' : ''}
+                  </p>
+                  <p className="text-[10px] text-zinc-400">
+                    {isWinner
+                      ? '1st Place · Winner'
+                      : isLoser
+                        ? 'Last Place'
+                        : `${idx + 1}${idx === 1 ? 'nd' : idx === 2 ? 'rd' : 'th'} Place`}
+                  </p>
                 </div>
               </div>
-            );
-          })}
 
-        {/* Loser Section Matching Reference */}
-        {loser && (
-          <div className="mt-4 pt-4 border-t border-[#a87e2b]/30 text-center">
-            <p className="text-xs text-zinc-400 mb-2">
-              <span className="font-bold text-red-400">{loser.username}</span> is the last player remaining
-            </p>
-            <div className="w-full py-2.5 rounded-xl bg-red-950/70 border border-red-700/60 text-red-300 font-extrabold text-xs tracking-widest uppercase">
-              💀 LAST PLACE
+              {/* Status or Skull for Loser */}
+              <div className="text-right">
+                {isLoser ? (
+                  <div className="flex items-center gap-1 text-red-400 font-bold text-xs">
+                    <span className="text-base">💀</span>
+                    <span>LAST</span>
+                  </div>
+                ) : isWinner ? (
+                  <span className="gold-text font-black text-xs sm:text-sm">WINNER</span>
+                ) : (
+                  <span className="text-zinc-400 font-semibold text-xs">Rank #{idx + 1}</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Final Loser Callout if applicable */}
+        {lastPlayer && state.rankings.length > 1 && (
+          <div className="p-3 rounded-2xl bg-red-950/30 border border-red-900/50 flex items-center justify-center gap-2 mt-2">
+            <span className="text-2xl">💀</span>
+            <div className="text-left">
+              <span className="text-[10px] text-red-400 font-bold uppercase tracking-wider block">
+                LAST PLACE
+              </span>
+              <span className="text-xs font-bold text-zinc-300">{lastPlayer.username}</span>
             </div>
           </div>
         )}
       </section>
 
-      {/* ── Actions Matching Reference (PLAY AGAIN & LEAVE) ─────────────── */}
-      <div className="pb-2 space-y-2">
+      {/* ── Bottom Action Buttons ───────────────────── */}
+      <footer className="space-y-2 pt-2 shrink-0">
         <button
           type="button"
           onClick={resetSession}
-          className="w-full btn-play rounded-2xl py-4 font-black text-sm tracking-wider uppercase"
+          className="w-full btn-play rounded-2xl py-3.5 sm:py-4 font-black text-sm sm:text-base tracking-wider uppercase shadow-lg active:scale-95 transition-all"
         >
           PLAY AGAIN
         </button>
         <button
           type="button"
           onClick={resetSession}
-          className="w-full btn-gold rounded-2xl py-3 font-bold text-xs tracking-wider uppercase"
+          className="w-full rounded-2xl bg-black/60 border border-zinc-700 py-3 text-zinc-300 font-bold text-xs sm:text-sm active:scale-95 transition-all hover:text-white uppercase tracking-wider"
         >
-          LEAVE
+          BACK TO LOBBY
         </button>
-      </div>
+      </footer>
     </main>
   );
 }
